@@ -1,0 +1,305 @@
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+.planner{padding:1rem 0;font-family:var(--font-sans);}
+.topbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:1.25rem;padding:.875rem 1.25rem;background:var(--color-background-primary);border:.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);}
+.ctrl{display:flex;align-items:center;gap:8px;}
+.ctrl label{font-size:13px;color:var(--color-text-secondary);white-space:nowrap;}
+.ctrl input[type=number]{width:54px;}
+.sep{width:.5px;height:26px;background:var(--color-border-tertiary);flex-shrink:0;}
+.seg{display:flex;border:.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);overflow:hidden;}
+.seg-btn{padding:5px 14px;font-size:13px;cursor:pointer;border:none;background:transparent;color:var(--color-text-secondary);transition:background .12s,color .12s;}
+.seg-btn:not(:last-child){border-right:.5px solid var(--color-border-secondary);}
+.seg-btn.on{background:var(--color-background-secondary);color:var(--color-text-primary);font-weight:500;}
+.action-group{display:flex;gap:6px;margin-left:auto;align-items:center;}
+.ico-btn{padding:5px 12px;font-size:13px;cursor:pointer;border:.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);background:transparent;color:var(--color-text-secondary);display:flex;align-items:center;gap:5px;white-space:nowrap;}
+.ico-btn:hover{background:var(--color-background-secondary);color:var(--color-text-primary);border-color:var(--color-border-primary);}
+.ico-btn.danger:hover{background:var(--color-background-danger);color:var(--color-text-danger);border-color:var(--color-border-danger);}
+.ico-btn svg{width:14px;height:14px;flex-shrink:0;}
+.info-pill{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;background:var(--color-background-secondary);border:.5px solid var(--color-border-tertiary);border-radius:999px;font-size:12px;color:var(--color-text-secondary);margin-bottom:1.25rem;}
+.info-pill strong{color:var(--color-text-primary);font-weight:500;}
+.fw{overflow:auto;}
+.slot{position:absolute;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;border-radius:var(--border-radius-md);border:.5px solid var(--color-border-tertiary);background:var(--color-background-primary);transition:border-color .12s,background .12s;}
+.slot:hover{background:var(--color-background-secondary);border-color:var(--color-border-secondary);}
+.slot.filled{background:var(--color-background-secondary);border-color:var(--color-border-secondary);}
+.slot-name{font-size:13px;font-weight:500;color:var(--color-text-primary);text-align:center;max-width:96px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.3;}
+.slot-hint{font-size:12px;color:var(--color-text-tertiary);}
+.rgrid{display:grid;}
+.rgrid .slot{position:relative;width:114px;height:130px;}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.38);display:flex;align-items:center;justify-content:center;z-index:200;}
+.mcard{background:var(--color-background-primary);border:.5px solid var(--color-border-secondary);border-radius:var(--border-radius-lg);padding:1.5rem;width:288px;}
+.mcard.wide{width:420px;max-width:95vw;}
+.mcard h3{font-size:15px;font-weight:500;color:var(--color-text-primary);margin-bottom:1rem;}
+.mcard label{font-size:13px;color:var(--color-text-secondary);display:block;margin-bottom:4px;}
+.mcard input[type=text]{width:100%;margin-bottom:1rem;}
+.mrow{display:flex;flex-direction:column;align-items:center;gap:12px;}
+.color-row{display:flex;gap:8px;align-items:center;margin-bottom:1rem;}
+.mbtns{display:flex;gap:8px;justify-content:flex-end;margin-top:1.25rem;}
+.bdanger{padding:6px 14px;font-size:13px;cursor:pointer;border:.5px solid var(--color-border-danger);border-radius:var(--border-radius-md);background:transparent;color:var(--color-text-danger);}
+.bprimary{padding:6px 14px;font-size:13px;cursor:pointer;border:.5px solid var(--color-border-primary);border-radius:var(--border-radius-md);background:var(--color-background-secondary);color:var(--color-text-primary);font-weight:500;}
+.bsuccess{padding:6px 14px;font-size:13px;cursor:pointer;border:.5px solid var(--color-border-success);border-radius:var(--border-radius-md);background:var(--color-background-success);color:var(--color-text-success);font-weight:500;}
+.json-area{width:100%;height:180px;font-family:var(--font-mono);font-size:12px;padding:10px;border:.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);background:var(--color-background-secondary);color:var(--color-text-primary);resize:vertical;}
+.json-area:focus{outline:none;border-color:var(--color-border-primary);}
+.toast{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%);background:var(--color-background-secondary);border:.5px solid var(--color-border-secondary);border-radius:999px;padding:7px 18px;font-size:13px;color:var(--color-text-primary);z-index:300;opacity:0;transition:opacity .2s;pointer-events:none;}
+.toast.show{opacity:1;}
+.err-msg{font-size:12px;color:var(--color-text-danger);margin-top:6px;min-height:16px;}
+</style>
+
+<div class="planner">
+  <h2 class="sr-only">Wingsuit formation planner — configure rows, columns, formation type, assign pilots, export or import JSON.</h2>
+  <div class="topbar">
+    <div class="ctrl">
+      <label>Rows</label>
+      <input type="number" id="rows" min="1" max="12" value="3">
+    </div>
+    <div class="sep" id="cols-sep"></div>
+    <div class="ctrl" id="cols-ctrl">
+      <label>Columns</label>
+      <input type="number" id="cols" min="1" max="12" value="3">
+    </div>
+    <div class="sep"></div>
+    <div class="ctrl">
+      <label>Formation</label>
+      <div class="seg">
+        <button class="seg-btn on" data-mode="regular">Regular</button>
+        <button class="seg-btn" data-mode="diamond">Diamond</button>
+      </div>
+    </div>
+    <div class="action-group">
+      <button class="ico-btn" id="btn-export">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v8M5 7l3 3 3-3M3 12h10"/></svg>
+        Export
+      </button>
+      <button class="ico-btn" id="btn-import">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 14V6M5 9l3-3 3 3M3 4h10"/></svg>
+        Import
+      </button>
+      <button class="ico-btn danger" id="clr">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h10M6 4V3h4v1M5 4l.5 9h5L11 4"/></svg>
+        Clear
+      </button>
+    </div>
+  </div>
+  <div id="info-bar" style="display:none;">
+    <div class="info-pill" id="info-text"></div>
+  </div>
+  <div class="fw" id="fw"></div>
+</div>
+
+<div id="modal-pilot" style="display:none;" class="overlay">
+  <div class="mcard">
+    <h3>Assign pilot</h3>
+    <div class="mrow">
+      <div id="ws-prev"></div>
+      <div style="width:100%">
+        <label>Pilot name</label>
+        <input type="text" id="pname" placeholder="e.g. Anna Kowalska" maxlength="24">
+        <label>Suit color</label>
+        <div class="color-row">
+          <input type="color" id="pcol" value="#1D9E75" style="width:40px;height:32px;border:.5px solid var(--color-border-tertiary);border-radius:6px;cursor:pointer;padding:2px;">
+          <span style="font-size:12px;color:var(--color-text-tertiary);">Pick wingsuit color</span>
+        </div>
+      </div>
+    </div>
+    <div class="mbtns">
+      <button class="bdanger" id="mrem">Remove</button>
+      <button class="bprimary" id="mcan">Cancel</button>
+      <button class="bprimary" id="msav">Save</button>
+    </div>
+  </div>
+</div>
+
+<div id="modal-export" style="display:none;" class="overlay">
+  <div class="mcard wide">
+    <h3>Export formation</h3>
+    <label>Copy the JSON below to save your formation</label>
+    <textarea class="json-area" id="export-area" readonly></textarea>
+    <div class="mbtns">
+      <button class="bprimary" id="export-copy">Copy to clipboard</button>
+      <button class="bprimary" id="export-close">Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="modal-import" style="display:none;" class="overlay">
+  <div class="mcard wide">
+    <h3>Import formation</h3>
+    <label>Paste exported JSON to restore a formation</label>
+    <textarea class="json-area" id="import-area" placeholder='{"rows":3,"cols":3,"mode":"regular","cells":{"0,0":{"name":"Anna","color":"#1D9E75"}}}'></textarea>
+    <div class="err-msg" id="import-err"></div>
+    <div class="mbtns">
+      <button class="bprimary" id="import-cancel">Cancel</button>
+      <button class="bsuccess" id="import-load">Load formation</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const S={rows:3,cols:3,mode:'regular',cells:{}};
+let ekey=null;
+const $=id=>document.getElementById(id);
+
+function key(r,c){return r+','+c;}
+
+function ws(color,sz){
+  const s=sz||56,c=color||'#1D9E75';
+  return `<svg width="${s}" height="${s}" viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg"><g transform="translate(28,28)"><ellipse rx="5" ry="6" cy="-14" fill="${c}" opacity=".9"/><rect x="-4" y="-10" width="8" height="20" rx="3" fill="${c}"/><path d="M-4,-4 Q-20,-2 -24,6 Q-18,8 -4,4 Z" fill="${c}" opacity=".85"/><path d="M4,-4 Q20,-2 24,6 Q18,8 4,4 Z" fill="${c}" opacity=".85"/><path d="M-4,8 Q-10,14 -8,20 Q-4,18 -2,12 Z" fill="${c}" opacity=".8"/><path d="M4,8 Q10,14 8,20 Q4,18 2,12 Z" fill="${c}" opacity=".8"/><ellipse rx="3" ry="2.5" cy="-14" cx="0" fill="#fff" opacity=".5"/></g></svg>`;
+}
+
+function makeSlot(k,d,extra){
+  const el=document.createElement('div');
+  el.className='slot'+(d?' filled':'');
+  if(extra) Object.assign(el.style,extra);
+  el.innerHTML=d
+    ? ws(d.color,52)+`<div class="slot-name">${d.name||'(unnamed)'}</div>`
+    : `<div style="opacity:.2">${ws('#888',36)}</div><div class="slot-hint">+ add</div>`;
+  el.addEventListener('mouseenter',()=>{if(!d)el.style.background='var(--color-background-secondary)';});
+  el.addEventListener('mouseleave',()=>{if(!d)el.style.background='var(--color-background-primary)';});
+  el.addEventListener('click',()=>openModal(k));
+  return el;
+}
+
+function rowCount(total,r){
+  const mid=Math.floor((total-1)/2);
+  return r<=mid?r+1:total-r;
+}
+
+function render(){
+  const fw=$('fw'); fw.innerHTML='';
+  const isDia=S.mode==='diamond';
+  $('cols-ctrl').style.display=isDia?'none':'flex';
+  $('cols-sep').style.display=isDia?'none':'block';
+  if(isDia){
+    const mid=Math.floor((S.rows-1)/2);
+    let tot=0;for(let r=0;r<S.rows;r++)tot+=rowCount(S.rows,r);
+    $('info-text').innerHTML=`<strong>${S.rows}</strong> rows &nbsp;·&nbsp; widest <strong>${mid+1}</strong> &nbsp;·&nbsp; <strong>${tot}</strong> total slots`;
+    $('info-bar').style.display='block';
+    const cW=114,cH=130,gX=8,gY=8,sX=cW+gX,sY=cH+gY;
+    const maxC=mid+1,canW=maxC*sX,canH=S.rows*sY;
+    const wrap=document.createElement('div');
+    wrap.style.cssText=`position:relative;width:${canW}px;height:${canH}px;`;
+    for(let r=0;r<S.rows;r++){
+      const cnt=rowCount(S.rows,r);
+      const rW=cnt*sX-gX,sx=(canW-rW)/2,y=r*sY;
+      for(let c=0;c<cnt;c++){
+        const k=key(r,c),d=S.cells[k],x=sx+c*sX;
+        const slot=makeSlot(k,d,{left:Math.round(x)+'px',top:Math.round(y)+'px',width:cW+'px',height:cH+'px',position:'absolute'});
+        wrap.appendChild(slot);
+      }
+    }
+    fw.appendChild(wrap);
+  } else {
+    $('info-bar').style.display='none';
+    const grid=document.createElement('div');
+    grid.className='rgrid';
+    grid.style.cssText=`grid-template-columns:repeat(${S.cols},114px);width:${S.cols*114}px;gap:0;`;
+    for(let r=0;r<S.rows;r++)
+      for(let c=0;c<S.cols;c++){
+        const k=key(r,c),d=S.cells[k];
+        const slot=makeSlot(k,d,{width:'114px',height:'130px'});
+        grid.appendChild(slot);
+      }
+    fw.appendChild(grid);
+  }
+}
+
+function openModal(k){
+  ekey=k;
+  const d=S.cells[k]||{};
+  $('pname').value=d.name||'';
+  $('pcol').value=d.color||'#1D9E75';
+  prevUpdate();
+  $('mrem').style.display=d.name?'':'none';
+  $('modal-pilot').style.display='flex';
+  setTimeout(()=>$('pname').focus(),40);
+}
+
+function prevUpdate(){
+  $('ws-prev').innerHTML=ws($('pcol').value,72);
+}
+
+function toast(msg){
+  const t=$('toast');
+  t.textContent=msg;
+  t.classList.add('show');
+  clearTimeout(t._t);
+  t._t=setTimeout(()=>t.classList.remove('show'),2200);
+}
+
+function toJSON(){
+  return JSON.stringify({rows:S.rows,cols:S.cols,mode:S.mode,cells:S.cells},null,2);
+}
+
+function fromJSON(str){
+  const d=JSON.parse(str);
+  if(typeof d.rows!=='number'||typeof d.mode!=='string'||typeof d.cells!=='object') throw new Error('Invalid format');
+  S.rows=Math.max(1,Math.min(12,d.rows));
+  S.cols=Math.max(1,Math.min(12,d.cols||3));
+  S.mode=d.mode==='diamond'?'diamond':'regular';
+  S.cells=d.cells||{};
+  $('rows').value=S.rows;
+  $('cols').value=S.cols;
+  document.querySelectorAll('.seg-btn').forEach(b=>{
+    b.classList.toggle('on',b.dataset.mode===S.mode);
+  });
+  render();
+}
+
+$('pcol').addEventListener('input',prevUpdate);
+$('msav').addEventListener('click',()=>{
+  const n=$('pname').value.trim(),c=$('pcol').value;
+  if(n)S.cells[ekey]={name:n,color:c};else delete S.cells[ekey];
+  $('modal-pilot').style.display='none';render();
+});
+$('mcan').addEventListener('click',()=>{$('modal-pilot').style.display='none';});
+$('mrem').addEventListener('click',()=>{delete S.cells[ekey];$('modal-pilot').style.display='none';render();});
+$('pname').addEventListener('keydown',e=>{if(e.key==='Enter')$('msav').click();if(e.key==='Escape')$('mcan').click();});
+$('rows').addEventListener('change',e=>{S.rows=Math.max(1,Math.min(12,+e.target.value||1));render();});
+$('cols').addEventListener('change',e=>{S.cols=Math.max(1,Math.min(12,+e.target.value||1));render();});
+document.querySelectorAll('.seg-btn').forEach(b=>{
+  b.addEventListener('click',()=>{
+    S.mode=b.dataset.mode;
+    document.querySelectorAll('.seg-btn').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on');render();
+  });
+});
+$('clr').addEventListener('click',()=>{S.cells={};render();});
+
+$('btn-export').addEventListener('click',()=>{
+  $('export-area').value=toJSON();
+  $('modal-export').style.display='flex';
+  setTimeout(()=>$('export-area').select(),40);
+});
+$('export-close').addEventListener('click',()=>{$('modal-export').style.display='none';});
+$('export-copy').addEventListener('click',()=>{
+  $('export-area').select();
+  try{
+    navigator.clipboard.writeText($('export-area').value).then(()=>toast('Copied to clipboard'));
+  } catch(e){
+    document.execCommand('copy');
+    toast('Copied to clipboard');
+  }
+});
+
+$('btn-import').addEventListener('click',()=>{
+  $('import-area').value='';
+  $('import-err').textContent='';
+  $('modal-import').style.display='flex';
+  setTimeout(()=>$('import-area').focus(),40);
+});
+$('import-cancel').addEventListener('click',()=>{$('modal-import').style.display='none';});
+$('import-load').addEventListener('click',()=>{
+  $('import-err').textContent='';
+  try{
+    fromJSON($('import-area').value.trim());
+    $('modal-import').style.display='none';
+    toast('Formation loaded');
+  } catch(e){
+    $('import-err').textContent='Invalid JSON — please paste a valid exported formation.';
+  }
+});
+
+render();
+</script>
