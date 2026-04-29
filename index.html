@@ -1,6 +1,58 @@
 
 <style>
+:root{
+  --font-sans:system-ui,-apple-system,"Segoe UI",Roboto,Inter,sans-serif;
+  --font-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --color-background-primary:#ffffff;
+  --color-background-secondary:#f4f5f7;
+  --color-background-danger:#fdecec;
+  --color-background-success:#e7f5ee;
+  --color-text-primary:#1a1d22;
+  --color-text-secondary:#56606e;
+  --color-text-tertiary:#8a94a3;
+  --color-text-danger:#b3261e;
+  --color-text-success:#1f7a4d;
+  --color-border-primary:#1a1d22;
+  --color-border-secondary:#c9cfd8;
+  --color-border-tertiary:#e3e6ec;
+  --color-border-danger:#e8b3af;
+  --color-border-success:#bde0cc;
+  --border-radius-md:8px;
+  --border-radius-lg:14px;
+  --slot-shadow:0 1px 2px rgba(0,0,0,.04);
+  --overlay-bg:rgba(0,0,0,.38);
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --color-background-primary:#0f1115;
+    --color-background-secondary:#181b21;
+    --color-background-danger:#3a1d1c;
+    --color-background-success:#16301f;
+    --color-text-primary:#e8ecf2;
+    --color-text-secondary:#a3acba;
+    --color-text-tertiary:#6e7787;
+    --color-text-danger:#f08079;
+    --color-text-success:#7fd3a4;
+    --color-border-primary:#e8ecf2;
+    --color-border-secondary:#2a2f38;
+    --color-border-tertiary:#22262d;
+    --color-border-danger:#5a2b28;
+    --color-border-success:#23512f;
+    --slot-shadow:none;
+    --overlay-bg:rgba(0,0,0,.6);
+  }
+}
 *{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;}
+body{background:var(--color-background-secondary);color:var(--color-text-primary);font-family:var(--font-sans);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;}
+.page{max-width:960px;margin:0 auto;padding:2rem 1.25rem 4rem;}
+.page-header{margin-bottom:1.5rem;}
+.page-header h1{font-size:1.75rem;font-weight:600;letter-spacing:-.01em;color:var(--color-text-primary);}
+.lede{color:var(--color-text-secondary);margin-top:.35rem;font-size:14px;line-height:1.5;max-width:60ch;}
+.page-footer{margin-top:2rem;color:var(--color-text-tertiary);font-size:12.5px;text-align:center;}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
+input[type=number],input[type=text]{padding:6px 10px;border:.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);background:var(--color-background-primary);color:var(--color-text-primary);font:inherit;font-size:13px;}
+input[type=number]:focus-visible,input[type=text]:focus-visible,.seg-btn:focus-visible,.ico-btn:focus-visible,.bprimary:focus-visible,.bdanger:focus-visible,.bsuccess:focus-visible,.slot:focus-visible{outline:2px solid var(--color-border-primary);outline-offset:2px;}
 .planner{padding:1rem 0;font-family:var(--font-sans);}
 .topbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:1.25rem;padding:.875rem 1.25rem;background:var(--color-background-primary);border:.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);}
 .ctrl{display:flex;align-items:center;gap:8px;}
@@ -19,14 +71,15 @@
 .info-pill{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;background:var(--color-background-secondary);border:.5px solid var(--color-border-tertiary);border-radius:999px;font-size:12px;color:var(--color-text-secondary);margin-bottom:1.25rem;}
 .info-pill strong{color:var(--color-text-primary);font-weight:500;}
 .fw{overflow:auto;}
+.fw>*{margin-left:auto;margin-right:auto;}
 .slot{position:absolute;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;border-radius:var(--border-radius-md);border:.5px solid var(--color-border-tertiary);background:var(--color-background-primary);transition:border-color .12s,background .12s;}
 .slot:hover{background:var(--color-background-secondary);border-color:var(--color-border-secondary);}
-.slot.filled{background:var(--color-background-secondary);border-color:var(--color-border-secondary);}
+.slot.filled{background:var(--color-background-secondary);border-color:var(--color-border-secondary);box-shadow:var(--slot-shadow);}
 .slot-name{font-size:13px;font-weight:500;color:var(--color-text-primary);text-align:center;max-width:96px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.3;}
 .slot-hint{font-size:12px;color:var(--color-text-tertiary);}
 .rgrid{display:grid;}
 .rgrid .slot{position:relative;width:114px;height:130px;}
-.overlay{position:fixed;inset:0;background:rgba(0,0,0,.38);display:flex;align-items:center;justify-content:center;z-index:200;}
+.overlay{position:fixed;inset:0;background:var(--overlay-bg);display:flex;align-items:center;justify-content:center;z-index:200;}
 .mcard{background:var(--color-background-primary);border:.5px solid var(--color-border-secondary);border-radius:var(--border-radius-lg);padding:1.5rem;width:288px;}
 .mcard.wide{width:420px;max-width:95vw;}
 .mcard h3{font-size:15px;font-weight:500;color:var(--color-text-primary);margin-bottom:1rem;}
@@ -45,8 +98,12 @@
 .err-msg{font-size:12px;color:var(--color-text-danger);margin-top:6px;min-height:16px;}
 </style>
 
+<div class="page">
+<header class="page-header">
+  <h1>Wingsuit formation planner</h1>
+  <p class="lede">Plan who flies where. Pick a layout, assign pilots and suit colors, then export the formation as JSON to save or share it.</p>
+</header>
 <div class="planner">
-  <h2 class="sr-only">Wingsuit formation planner — configure rows, columns, formation type, assign pilots, export or import JSON.</h2>
   <div class="topbar">
     <div class="ctrl">
       <label>Rows</label>
@@ -84,6 +141,8 @@
     <div class="info-pill" id="info-text"></div>
   </div>
   <div class="fw" id="fw"></div>
+</div>
+<footer class="page-footer">Click any slot to assign a pilot. Use Export / Import to save and share.</footer>
 </div>
 
 <div id="modal-pilot" style="display:none;" class="overlay">
