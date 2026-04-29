@@ -106,7 +106,7 @@ input[type=number]:focus-visible,input[type=text]:focus-visible,.seg-btn:focus-v
 <div class="planner">
   <div class="topbar">
     <div class="ctrl">
-      <label>Rows</label>
+      <label id="rows-label">Rows</label>
       <input type="number" id="rows" min="1" max="12" value="3">
     </div>
     <div class="sep" id="cols-sep"></div>
@@ -220,9 +220,8 @@ function makeSlot(k,d,extra){
   return el;
 }
 
-function rowCount(total,r){
-  const mid=Math.floor((total-1)/2);
-  return r<=mid?r+1:total-r;
+function rowCount(widest,r){
+  return widest-Math.abs(r-widest+1);
 }
 
 function render(){
@@ -230,17 +229,18 @@ function render(){
   const isDia=S.mode==='diamond';
   $('cols-ctrl').style.display=isDia?'none':'flex';
   $('cols-sep').style.display=isDia?'none':'block';
+  $('rows-label').textContent=isDia?'Widest row':'Rows';
   if(isDia){
-    const mid=Math.floor((S.rows-1)/2);
-    let tot=0;for(let r=0;r<S.rows;r++)tot+=rowCount(S.rows,r);
-    $('info-text').innerHTML=`<strong>${S.rows}</strong> rows &nbsp;·&nbsp; widest <strong>${mid+1}</strong> &nbsp;·&nbsp; <strong>${tot}</strong> total slots`;
+    const widest=S.rows,nrows=2*widest-1;
+    let tot=0;for(let r=0;r<nrows;r++)tot+=rowCount(widest,r);
+    $('info-text').innerHTML=`widest <strong>${widest}</strong> &nbsp;·&nbsp; <strong>${nrows}</strong> rows &nbsp;·&nbsp; <strong>${tot}</strong> total slots`;
     $('info-bar').style.display='block';
     const cW=114,cH=130,gX=8,gY=8,sX=cW+gX,sY=cH+gY;
-    const maxC=mid+1,canW=maxC*sX,canH=S.rows*sY;
+    const maxC=widest,canW=maxC*sX,canH=nrows*sY;
     const wrap=document.createElement('div');
     wrap.style.cssText=`position:relative;width:${canW}px;height:${canH}px;`;
-    for(let r=0;r<S.rows;r++){
-      const cnt=rowCount(S.rows,r);
+    for(let r=0;r<nrows;r++){
+      const cnt=rowCount(widest,r);
       const rW=cnt*sX-gX,sx=(canW-rW)/2,y=r*sY;
       for(let c=0;c<cnt;c++){
         const k=key(r,c),d=S.cells[k],x=sx+c*sX;
