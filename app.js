@@ -57,9 +57,8 @@ function makeSlot(k,d,i,extra,compact,noDropTarget){
     ?`Slot ${coordLabel(r,c)}, ${d.name||'unnamed'}, ${d.color} suit, click to edit`
     :`Slot ${coordLabel(r,c)}, empty, click to assign pilot`);
   if(extra) Object.assign(el.style,extra);
-  const sz=compact?36:52;
   const inner=d
-    ? `<div class="slot-svg">${ws(d.color,sz)}</div><div class="slot-name">${esc(d.name||'(unnamed)')}</div>`
+    ? `<div class="slot-svg">${ws(d.color,40)}</div><div class="slot-name">${esc(d.name||'(unnamed)')}</div>`
     : `<div class="slot-cross"></div>`;
   el.innerHTML=inner;
   el.addEventListener('click',()=>{
@@ -203,7 +202,7 @@ function makeBenchItem(d,i){
   el.dataset.key=k;
   el.style.setProperty('--suit',d.color);
   el.setAttribute('aria-label',`Bench pilot ${d.name||'unnamed'}, ${d.color} suit, drag to formation or click to edit`);
-  el.innerHTML=`<div class="slot-svg">${ws(d.color,42)}</div><div class="slot-name">${esc(d.name||'(unnamed)')}</div>`;
+  el.innerHTML=`<div class="slot-svg">${ws(d.color,40)}</div><div class="slot-name">${esc(d.name||'(unnamed)')}</div>`;
   el.addEventListener('click',()=>{
     if(_dragMoved){_dragMoved=false;return;}
     openModal(k);
@@ -276,8 +275,8 @@ function render(){
   let i=0;
   if(isFf){
     const ff=cur();
-    const cW=114,cH=130,hsX=cW/2,gY=8,sY=cH+gY;
-    const EW=48,EH=48;
+    const cW=70,cH=80,hsX=cW/2,gY=8,sY=cH+gY;
+    const EW=30,EH=30;
     const hxMax=2*ff.cols-1;
     const canW=(hxMax-1)*hsX+cW;
     const canH=ff.rows*sY-gY;
@@ -298,7 +297,7 @@ function render(){
     fw.appendChild(wrap);
   } else if(isDia){
     const widest=cur().rows,nrows=2*widest-1;
-    const cW=114,cH=130,gX=8,gY=8,sX=cW+gX,sY=cH+gY;
+    const cW=70,cH=80,gX=8,gY=8,sX=cW+gX,sY=cH+gY;
     const canW=widest*sX,canH=nrows*sY;
     const wrap=document.createElement('div');
     wrap.style.cssText=`position:relative;width:${canW}px;height:${canH}px;`;
@@ -328,11 +327,11 @@ function render(){
   } else {
     const grid=document.createElement('div');
     grid.className='rgrid';
-    grid.style.cssText=`grid-template-columns:repeat(${cur().cols},114px);grid-auto-rows:130px;width:${cur().cols*114}px;gap:0;`;
+    grid.style.cssText=`grid-template-columns:repeat(${cur().cols},70px);grid-auto-rows:80px;width:${cur().cols*70}px;gap:0;`;
     for(let r=0;r<cur().rows;r++)
       for(let c=0;c<cur().cols;c++){
         const k=key(r,c),d=cur().cells[k];
-        const slot=makeSlot(k,d,i++,{width:'114px',height:'130px'});
+        const slot=makeSlot(k,d,i++,{width:'70px',height:'80px'});
         grid.appendChild(slot);
       }
     fw.appendChild(grid);

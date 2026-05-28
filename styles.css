@@ -215,7 +215,7 @@ input[type=number]:focus-visible,input[type=text]:focus-visible,
   flex-direction:column;
   align-items:center;
   justify-content:center;
-  gap:6px;
+  gap:3px;
   border-radius:var(--border-radius-md);
   border:.5px dashed var(--color-border-secondary);
   background:var(--color-background-primary);
@@ -255,17 +255,17 @@ input[type=number]:focus-visible,input[type=text]:focus-visible,
 .slot-name{
   font-family:var(--font-display);
   font-weight:500;
-  font-size:12px;
-  letter-spacing:.1em;
+  font-size:10px;
+  letter-spacing:.06em;
   text-transform:uppercase;
   color:var(--color-text-primary);
   text-align:center;
-  max-width:100px;
+  max-width:60px;
   overflow:hidden;
   text-overflow:ellipsis;
   white-space:nowrap;
   line-height:1;
-  padding:0 8px;
+  padding:0 4px;
 }
 .slot-cross{
   width:14px;
@@ -286,7 +286,7 @@ input[type=number]:focus-visible,input[type=text]:focus-visible,
 }
 
 .rgrid{display:grid;}
-.rgrid .slot{position:relative;width:114px;height:130px;}
+.rgrid .slot{position:relative;width:70px;height:80px;}
 
 .slot.compact{padding:0;}
 .slot.compact .slot-cross{
@@ -389,13 +389,13 @@ input[type=number]:focus-visible,input[type=text]:focus-visible,
 }
 .bench-item{
   position:relative;
-  width:84px;
-  height:96px;
+  width:70px;
+  height:80px;
   display:flex;
   flex-direction:column;
   align-items:center;
   justify-content:center;
-  gap:4px;
+  gap:3px;
   border:.5px solid var(--color-border-secondary);
   border-radius:var(--border-radius-md);
   background:var(--color-background-primary);
@@ -415,7 +415,7 @@ input[type=number]:focus-visible,input[type=text]:focus-visible,
   height:3px;
   background:var(--suit,transparent);
 }
-.bench-item .slot-name{font-size:10.5px;max-width:74px;}
+.bench-item .slot-name{max-width:54px;}
 
 .trash-zone{
   display:flex;
