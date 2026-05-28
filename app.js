@@ -1,12 +1,14 @@
+const MODES=['regular','diamond','freeform'];
 const S={
   mode:'regular',
   regular:{rows:3,cols:3,cells:{},bench:[]},
-  diamond:{rows:3,cells:{},bench:[]}
+  diamond:{rows:3,cells:{},bench:[]},
+  freeform:{rows:5,cols:5,cells:{},bench:[]}
 };
 const PALETTE=['#1a1d22','#94a3b8','#f8f9fa','#d93025','#e8590c','#fcc419','#82c91e','#1d9e75','#0ca678','#15aabf','#1971c2','#4263eb','#7950f2','#d6336c'];
 let ekey=null,lastEdit=null,lastFocused=null,_suppressAnim=false,_drag=null,_dragMoved=false;
 function cur(){return S[S.mode];}
-function other(){return S[S.mode==='regular'?'diamond':'regular'];}
+function others(){return MODES.filter(m=>m!==S.mode).map(m=>S[m]);}
 function bkey(i){return 'b:'+i;}
 function isBench(k){return typeof k==='string'&&k.startsWith('b:');}
 function getPilot(k){return isBench(k)?cur().bench[+k.slice(2)]:cur().cells[k];}
@@ -38,14 +40,16 @@ function ws(color,sz){
 }
 
 function coordLabel(r,c){
-  return S.mode==='diamond'?`R${r+1}·P${c+1}`:`R${r+1}·C${c+1}`;
+  if(S.mode==='diamond')return `R${r+1}·P${c+1}`;
+  if(S.mode==='freeform')return `R${r+1}·X${c}`;
+  return `R${r+1}·C${c+1}`;
 }
 
-function makeSlot(k,d,i,extra){
+function makeSlot(k,d,i,extra,compact,noDropTarget){
   const [r,c]=k.split(',').map(Number);
   const el=document.createElement('button');
   el.type='button';
-  el.className='slot'+(d?' filled':'');
+  el.className='slot'+(d?' filled':'')+(compact?' compact':'');
   el.dataset.key=k;
   el.style.setProperty('--i',i);
   if(d) el.style.setProperty('--suit',d.color);
@@ -53,8 +57,9 @@ function makeSlot(k,d,i,extra){
     ?`Slot ${coordLabel(r,c)}, ${d.name||'unnamed'}, ${d.color} suit, click to edit`
     :`Slot ${coordLabel(r,c)}, empty, click to assign pilot`);
   if(extra) Object.assign(el.style,extra);
+  const sz=compact?36:52;
   const inner=d
-    ? `<div class="slot-svg">${ws(d.color,52)}</div><div class="slot-name">${esc(d.name||'(unnamed)')}</div>`
+    ? `<div class="slot-svg">${ws(d.color,sz)}</div><div class="slot-name">${esc(d.name||'(unnamed)')}</div>`
     : `<div class="slot-cross"></div>`;
   el.innerHTML=inner;
   el.addEventListener('click',()=>{
@@ -62,7 +67,7 @@ function makeSlot(k,d,i,extra){
     openModal(k);
   });
   if(d) attachDragSource(el,k);
-  attachSlotDropTarget(el,k);
+  if(!noDropTarget) attachSlotDropTarget(el,k);
   return el;
 }
 
@@ -99,6 +104,50 @@ function attachSlotDropTarget(el,k){
     e.preventDefault();
     el.classList.remove('drag-over');
     if(!_drag||_drag.src===k)return;
+    dropOnSlot(_drag.src,k);
+  });
+}
+
+function attachFreeformSnap(canvas,ff,hsX,sY,cyOffset,hxMax){
+  let lastK=null;
+  function snapKey(e){
+    const rect=canvas.getBoundingClientRect();
+    const x=e.clientX-rect.left;
+    const y=e.clientY-rect.top;
+    let hx=Math.round(x/hsX)-1;
+    hx=Math.max(0,Math.min(hxMax-1,hx));
+    let r=Math.round((y-cyOffset)/sY);
+    r=Math.max(0,Math.min(ff.rows-1,r));
+    return key(r,hx);
+  }
+  function clearHighlight(){
+    if(!lastK)return;
+    const el=canvas.querySelector(`.slot[data-key="${lastK}"]`);
+    if(el)el.classList.remove('drag-over');
+    lastK=null;
+  }
+  canvas.addEventListener('dragover',e=>{
+    if(!_drag)return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect='move';
+    const k=snapKey(e);
+    if(_drag.src===k){clearHighlight();return;}
+    if(k===lastK)return;
+    clearHighlight();
+    const el=canvas.querySelector(`.slot[data-key="${k}"]`);
+    if(el)el.classList.add('drag-over');
+    lastK=k;
+  });
+  canvas.addEventListener('dragleave',e=>{
+    const to=e.relatedTarget;
+    if(!to||!canvas.contains(to))clearHighlight();
+  });
+  canvas.addEventListener('drop',e=>{
+    e.preventDefault();
+    if(!_drag){clearHighlight();return;}
+    const k=snapKey(e);
+    clearHighlight();
+    if(_drag.src===k)return;
     dropOnSlot(_drag.src,k);
   });
 }
@@ -189,6 +238,7 @@ function totalSlots(){
     let t=0;for(let r=0;r<n;r++)t+=rowCount(w,r);
     return t;
   }
+  if(S.mode==='freeform')return (2*cur().cols-1)*cur().rows;
   return cur().rows*cur().cols;
 }
 
@@ -198,6 +248,9 @@ function updateReadout(){
   if(S.mode==='diamond'){
     const w=cur().rows,n=2*w-1;
     layout=`<span class="tag">Diamond</span> <span>widest <strong>${w}</strong></span> <span class="dot">·</span> <span><strong>${n}</strong> rows</span>`;
+  } else if(S.mode==='freeform'){
+    const hx=2*cur().cols-1;
+    layout=`<span class="tag">Freeform</span> <span><strong>${cur().rows}</strong> rows</span> <span class="dot">·</span> <span><strong>${hx}</strong> half-cols</span>`;
   } else {
     layout=`<span class="tag">Grid</span> <span><strong>${cur().rows}</strong> × <strong>${cur().cols}</strong></span>`;
   }
@@ -213,6 +266,7 @@ function updateReadout(){
 function render(){
   const fw=$('fw'); fw.innerHTML='';
   const isDia=S.mode==='diamond';
+  const isFf=S.mode==='freeform';
   $('cols-ctrl').style.display=isDia?'none':'flex';
   $('cols-sep').style.display=isDia?'none':'block';
   $('rows-label').textContent=isDia?'Widest':'Rows';
@@ -220,7 +274,29 @@ function render(){
   if(!isDia)$('cols').value=cur().cols;
   updateReadout();
   let i=0;
-  if(isDia){
+  if(isFf){
+    const ff=cur();
+    const cW=114,cH=130,hsX=cW/2,gY=8,sY=cH+gY;
+    const EW=48,EH=48;
+    const hxMax=2*ff.cols-1;
+    const canW=(hxMax-1)*hsX+cW;
+    const canH=ff.rows*sY-gY;
+    const wrap=document.createElement('div');
+    wrap.className='ff-canvas';
+    wrap.style.cssText=`width:${canW}px;height:${canH}px;`;
+    for(let r=0;r<ff.rows;r++){
+      for(let hx=0;hx<hxMax;hx++){
+        const k=key(r,hx),d=ff.cells[k];
+        const cx=hx*hsX+cW/2,cy=r*sY+cH/2;
+        const sw=d?cW:EW,sh=d?cH:EH;
+        const left=cx-sw/2,top=cy-sh/2;
+        const slot=makeSlot(k,d,i++,{left:Math.round(left)+'px',top:Math.round(top)+'px',width:sw+'px',height:sh+'px',position:'absolute'},!d,true);
+        wrap.appendChild(slot);
+      }
+    }
+    attachFreeformSnap(wrap,ff,hsX,sY,cH/2,hxMax);
+    fw.appendChild(wrap);
+  } else if(isDia){
     const widest=cur().rows,nrows=2*widest-1;
     const cW=114,cH=130,gX=8,gY=8,sX=cW+gX,sY=cH+gY;
     const canW=widest*sX,canH=nrows*sY;
@@ -336,7 +412,7 @@ function toast(msg){
 }
 
 function toJSON(){
-  return JSON.stringify({mode:S.mode,regular:S.regular,diamond:S.diamond},null,2);
+  return JSON.stringify({mode:S.mode,regular:S.regular,diamond:S.diamond,freeform:S.freeform},null,2);
 }
 
 function clampDim(n,fallback){
@@ -358,25 +434,32 @@ function normalizeMode(m,fallbackDims,withCols){
 function fromJSON(str){
   const d=JSON.parse(str);
   if(typeof d.mode!=='string')throw new Error('Invalid format');
-  S.mode=d.mode==='diamond'?'diamond':'regular';
+  S.mode=MODES.includes(d.mode)?d.mode:'regular';
   const topDims={rows:d.rows,cols:d.cols};
-  if(d.regular||d.diamond){
+  if(d.regular||d.diamond||d.freeform){
     S.regular=normalizeMode(d.regular,topDims,true);
     S.diamond=normalizeMode(d.diamond,topDims,false);
+    S.freeform=d.freeform
+      ?normalizeMode(d.freeform,{rows:5,cols:5},true)
+      :{rows:5,cols:5,cells:{},bench:[]};
   } else if(typeof d.cells==='object'){
     const legacy=normalizeMode(d,topDims,true);
     S.regular={rows:legacy.rows,cols:legacy.cols,cells:{},bench:[]};
     S.diamond={rows:legacy.rows,cells:{},bench:[]};
+    S.freeform={rows:5,cols:5,cells:{},bench:[]};
     S[S.mode]=S.mode==='regular'
       ?{rows:legacy.rows,cols:legacy.cols,cells:legacy.cells,bench:legacy.bench}
-      :{rows:legacy.rows,cells:legacy.cells,bench:legacy.bench};
-    const o=S.mode==='regular'?'diamond':'regular';
-    for(const k in legacy.cells){
-      const p=legacy.cells[k];
-      if(!pilotInMode(p.name,S[o]))S[o].bench.push({name:p.name,color:p.color});
-    }
-    for(const p of legacy.bench){
-      if(!pilotInMode(p.name,S[o]))S[o].bench.push({name:p.name,color:p.color});
+      :S.mode==='diamond'
+        ?{rows:legacy.rows,cells:legacy.cells,bench:legacy.bench}
+        :{rows:5,cols:5,cells:legacy.cells,bench:legacy.bench};
+    for(const o of others()){
+      for(const k in legacy.cells){
+        const p=legacy.cells[k];
+        if(!pilotInMode(p.name,o))o.bench.push({name:p.name,color:p.color});
+      }
+      for(const p of legacy.bench){
+        if(!pilotInMode(p.name,o))o.bench.push({name:p.name,color:p.color});
+      }
     }
   } else throw new Error('Invalid format');
   document.querySelectorAll('.seg-btn').forEach(b=>{
@@ -396,8 +479,10 @@ $('msav').addEventListener('click',()=>{
   if(n){
     setPilot(ekey,{name:n,color:c});
     if(!isBench(ekey))lastEdit=ekey;
-    if(wasNew&&!isBench(ekey)&&!pilotInMode(n,other())){
-      other().bench.push({name:n,color:c});
+    if(wasNew&&!isBench(ekey)){
+      for(const o of others()){
+        if(!pilotInMode(n,o))o.bench.push({name:n,color:c});
+      }
     }
   } else removePilot(ekey);
   hideModal('modal-pilot');

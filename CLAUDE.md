@@ -24,19 +24,28 @@ The page is designed to be embedded in (or styled by) a host that provides these
 
 ## State and rendering
 
-Everything hangs off the module-scoped object `S` declared at `app.js:1`. The two formation modes own **everything separately** — dimensions, cells, and bench — so editing one doesn't disturb the other:
+Everything hangs off the module-scoped object `S` declared at `app.js:1`. Each of the three formation modes owns **everything separately** — dimensions, cells, and bench — so editing one doesn't disturb the others:
 
 ```js
 S = {
-  mode,                                                       // which mode is active
-  regular: { rows, cols, cells: {}, bench: [] },              // grid: rows × cols
-  diamond: { rows,        cells: {}, bench: [] }              // diamond: rows = widest (no cols)
+  mode,                                                      // which mode is active
+  regular:  { rows, cols, cells: {}, bench: [] },            // grid: rows × cols
+  diamond:  { rows,        cells: {}, bench: [] },           // diamond: rows = widest (no cols)
+  freeform: { rows, cols, cells: {}, bench: [] }             // freeform: half-step horizontal grid
 }
 ```
 
-The `rows`/`cols` inputs in the topbar read and write `cur().rows` / `cur().cols`; switching modes restores each mode's own dimensions. The cols input is hidden in diamond mode.
+The list of mode names is `MODES = ['regular','diamond','freeform']` (`app.js:1`). The `rows`/`cols` inputs in the topbar read and write `cur().rows` / `cur().cols`; switching modes restores each mode's own dimensions. The cols input is hidden only in diamond mode (freeform uses both).
 
-- `cur()` (`app.js:8`) returns the active mode's `{cells, bench}`; `other()` (`app.js:9`) returns the inactive one. **Never read `S.cells` or `S.bench` — always go through `cur()` / `other()`.**
+### Freeform mode
+
+Freeform exists so a single formation can mix square-aligned and diamond-aligned pilots. The canvas has `(2*cols - 1) * rows` snap positions — every row exposes both the integer half-step columns (square-aligned) and the offset half-step columns (diamond-aligned), and the user can place a pilot at any of them. Cell keys are `"r,hx"` where `hx` is the half-column index (0..2*cols-2).
+
+Filled slots render at the same 114×130 size as regular/diamond, so a pilot placed in a "diamond" half-position one row below two square neighbors visually overlaps with both of them — mimicking how the lower-row pilot tucks between the wings of the upper pair when viewed from above. Empty positions render as 48×48 crosses centered on the half-position and get a higher `z-index` (via `.ff-canvas .slot:not(.filled){z-index:2}`) so they stay clickable even where neighboring filled slots cover their center. The `compact` flag on `makeSlot` is set only for empty freeform slots and switches off the dashed border/background until hover.
+
+Drag-and-drop in freeform doesn't use per-slot drop targets. Each slot is rendered with `noDropTarget=true`, and `attachFreeformSnap(canvas, ff, hsX, sY, cyOffset, hxMax)` wires `dragover` / `dragleave` / `drop` on the canvas itself. It converts the pointer's `clientX/Y` to the nearest snap key with `Math.round(x/hsX) - 1` (horizontal) and `Math.round((y - cyOffset)/sY)` (vertical), highlights that slot's `.drag-over` class on hover, and on drop hands off to the existing `dropOnSlot(src, k)`. Net effect: drop anywhere in the canvas and the pilot snaps to the closest center — whether that snap point was empty (move) or filled (swap).
+
+- `cur()` returns the active mode's `{rows, cols?, cells, bench}`; `others()` returns the other modes as an array (so propagation and bulk updates can iterate). **Never read `S.cells` / `S.bench` directly — always go through `cur()` / `others()`.**
 - `cells` is keyed by `"r,c"` strings produced by `key(r, c)` (`app.js:21`). `bench` is a flat array of `{name, color}` objects for pilots who are resting off the formation.
 - Anything that holds a pilot is addressed by a string key. Grid keys are `"r,c"`; bench keys are `"b:<index>"` produced by `bkey(i)` (`app.js:10`). Use the source-agnostic helpers `getPilot(k)`, `setPilot(k, d)`, `removePilot(k)` (`app.js:12`, `app.js:110`, `app.js:106`) — they read/write `cur()` and let drag-and-drop, the edit modal, and trash work uniformly.
 - `mode` is `"regular"` or `"diamond"`. In diamond mode the `cols` control is hidden and row widths are computed by `rowCount(total, r)` (`app.js:181`), which produces a symmetric 1, 2, …, mid+1, …, 2, 1 pattern. The diamond is laid out absolutely inside a sized wrapper so rows stay centered; the regular mode uses CSS grid. In diamond, `rows` means "widest" — the single integer that determines both the widest row and (implicitly via `2*rows-1`) the total row count.
@@ -45,10 +54,10 @@ The `rows`/`cols` inputs in the topbar read and write `cur().rows` / `cur().cols
 
 ## Cross-mode propagation
 
-The two modes are otherwise isolated, with one exception: when a pilot is **created** (an empty slot is filled via the edit modal), they are also copied to the *other* mode's bench so the same roster is available in both shapes. The propagation rules:
+The three modes are otherwise isolated, with one exception: when a pilot is **created** (an empty slot is filled via the edit modal), they are also copied to the bench of every *other* mode so the same roster is available in all shapes. The propagation rules:
 
 - Trigger: `msav` handler, slot was empty (`getPilot(ekey)` returned undefined), name is non-empty, target is a slot (not the bench).
-- Skipped if a pilot with the same case-insensitive trimmed name already exists in the other mode (in either cells or bench) — see `pilotInMode(name, m)` (`app.js:13`).
+- For each mode in `others()`: skipped if a pilot with the same case-insensitive trimmed name already exists in that mode (in either cells or bench) — see `pilotInMode(name, m)`.
 - Edits, drags, removes, and trash drops do *not* propagate. Mode-isolated state means each mode owns its own positions and color choices.
 - The "Clear" button clears only the current mode.
 
@@ -66,14 +75,15 @@ Pilots can be dragged between any two slots (swap or move), from a slot to the b
 `toJSON()` and `fromJSON()` define the persisted shape:
 
 ```json
-{"mode":"regular","regular":{"rows":5,"cols":5,"cells":{...},"bench":[...]},"diamond":{"rows":3,"cells":{...},"bench":[...]}}
+{"mode":"regular","regular":{"rows":5,"cols":5,"cells":{...},"bench":[...]},"diamond":{"rows":3,"cells":{...},"bench":[...]},"freeform":{"rows":5,"cols":5,"cells":{...},"bench":[...]}}
 ```
 
-`fromJSON` coerces `mode` to one of the two valid values. Each mode's dimensions and `cells`/`bench` are sanitized via `normalizeMode(m, fallbackDims, withCols)`: `rows` (and `cols` if `withCols`) are clamped to 1–12 by `clampDim`, with `fallbackDims` providing a fallback when the per-mode field is missing. Bench entries without string `name` *and* `color` are dropped. **Imported JSON is the trust boundary**, so keep validation there if extending the schema.
+`fromJSON` coerces `mode` to one of the entries in `MODES`. Each mode's dimensions and `cells`/`bench` are sanitized via `normalizeMode(m, fallbackDims, withCols)`: `rows` (and `cols` if `withCols`) are clamped to 1–12 by `clampDim`, with `fallbackDims` providing a fallback when the per-mode field is missing. Bench entries without string `name` *and* `color` are dropped. **Imported JSON is the trust boundary**, so keep validation there if extending the schema.
 
-Backward compat handles two older formats via the same path:
-1. Pre-per-mode-state legacy: top-level `{rows, cols, mode, cells, bench}`. The active mode gets the legacy data with its dimensions; the other mode gets the same dimensions as a starting point and every distinct pilot from the legacy data lands on its bench (deduped via `pilotInMode`).
-2. Per-mode-state without per-mode dimensions: `{rows, cols, mode, regular:{cells,bench}, diamond:{cells,bench}}`. Each mode inherits the top-level `rows`/`cols` via `fallbackDims`, then takes over its own dimensions on next save.
+Backward compat handles older formats via the same path:
+1. Pre-per-mode-state legacy: top-level `{rows, cols, mode, cells, bench}`. The active mode gets the legacy data with its dimensions; the other modes get sensible defaults and every distinct pilot from the legacy data lands on each of their benches (deduped via `pilotInMode`).
+2. Per-mode-state without per-mode dimensions: each mode inherits the top-level `rows`/`cols` via `fallbackDims`, then takes over its own dimensions on next save.
+3. Per-mode-state without `freeform`: freeform initializes to an empty `{rows:5, cols:5, cells:{}, bench:[]}` on first load and starts being persisted on next save.
 
 ## Saving and sharing
 

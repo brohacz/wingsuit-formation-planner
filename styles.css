@@ -288,6 +288,35 @@ input[type=number]:focus-visible,input[type=text]:focus-visible,
 .rgrid{display:grid;}
 .rgrid .slot{position:relative;width:114px;height:130px;}
 
+.slot.compact{padding:0;}
+.slot.compact .slot-cross{
+  width:22px;
+  height:22px;
+  opacity:1;
+  background:
+    linear-gradient(var(--color-border-secondary),var(--color-border-secondary)) no-repeat center / 22px 1.5px,
+    linear-gradient(var(--color-border-secondary),var(--color-border-secondary)) no-repeat center / 1.5px 22px;
+}
+.slot.compact:not(.filled):not(.drag-over){border-color:transparent;background:transparent;}
+.slot.compact:not(.filled):not(.drag-over):hover{border-color:var(--color-border-primary);background:var(--color-background-primary);}
+.slot.compact:not(.filled):not(.drag-over):hover .slot-cross{background:
+  linear-gradient(var(--color-border-primary),var(--color-border-primary)) no-repeat center / 22px 1.5px,
+  linear-gradient(var(--color-border-primary),var(--color-border-primary)) no-repeat center / 1.5px 22px;
+}
+
+.ff-canvas{position:relative;}
+.ff-canvas .slot:not(.filled){z-index:2;}
+.ff-canvas .slot.filled{z-index:1;}
+.ff-mark{
+  position:absolute;
+  font-family:var(--font-mono);
+  font-size:9px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:var(--color-text-tertiary);
+  pointer-events:none;
+}
+
 .dia-axis{position:absolute;pointer-events:none;}
 .dia-axis-v{width:0;border-left:.5px dashed var(--color-border-tertiary);}
 .dia-axis-h{height:0;border-top:.5px dashed var(--color-border-tertiary);}
