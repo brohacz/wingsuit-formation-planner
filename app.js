@@ -680,6 +680,18 @@ $('import-load').addEventListener('click',()=>{
     $('import-err').textContent='Invalid JSON — please paste a valid exported formation.';
   }
 });
+$('import-sample').addEventListener('click',async()=>{
+  $('import-err').textContent='';
+  try{
+    const res=await fetch('sample-formation.json',{cache:'no-store'});
+    if(!res.ok)throw new Error('http '+res.status);
+    fromJSON(await res.text());
+    hideModal('modal-import');
+    toast('Sample formation loaded');
+  } catch(e){
+    $('import-err').textContent='Could not fetch sample-formation.json — serve the directory (e.g. python3 -m http.server) instead of opening via file://';
+  }
+});
 
 const SAVES_KEY='wfp:saves';
 const AUTOSAVE_KEY='wfp:autosave';
