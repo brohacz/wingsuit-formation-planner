@@ -234,8 +234,16 @@ input[type=number]:focus-visible,input[type=text]:focus-visible,
   border-style:solid;
   border-color:var(--color-border-secondary);
   box-shadow:var(--slot-shadow);
+  cursor:grab;
 }
+.slot.filled:active{cursor:grabbing;}
 .slot.filled:hover{border-color:var(--color-border-primary);}
+.slot.dragging{opacity:.35;}
+.slot.drag-over{
+  border-style:solid;
+  border-color:var(--color-border-primary);
+  background:var(--color-accent-soft);
+}
 .slot::after{
   content:"";
   position:absolute;
@@ -567,7 +575,7 @@ input[type=number]:focus-visible,input[type=text]:focus-visible,
 <script>
 const S={rows:3,cols:3,mode:'regular',cells:{}};
 const PALETTE=['#1a1d22','#94a3b8','#f8f9fa','#d93025','#e8590c','#fcc419','#82c91e','#1d9e75','#0ca678','#15aabf','#1971c2','#4263eb','#7950f2','#d6336c'];
-let ekey=null,lastEdit=null,lastFocused=null,_suppressAnim=false;
+let ekey=null,lastEdit=null,lastFocused=null,_suppressAnim=false,_dragKey=null,_dragMoved=false;
 const $=id=>document.getElementById(id);
 
 function key(r,c){return r+','+c;}
@@ -609,7 +617,49 @@ function makeSlot(k,d,i,extra){
     ? `<div class="slot-svg">${ws(d.color,52)}</div><div class="slot-name">${esc(d.name||'(unnamed)')}</div>`
     : `<div class="slot-cross"></div>`;
   el.innerHTML=inner;
-  el.addEventListener('click',()=>openModal(k));
+  el.addEventListener('click',()=>{
+    if(_dragMoved){_dragMoved=false;return;}
+    openModal(k);
+  });
+  if(d){
+    el.draggable=true;
+    el.addEventListener('dragstart',e=>{
+      _dragKey=k;
+      _dragMoved=false;
+      e.dataTransfer.effectAllowed='move';
+      e.dataTransfer.setData('text/plain',k);
+      el.classList.add('dragging');
+    });
+    el.addEventListener('dragend',()=>{
+      el.classList.remove('dragging');
+      document.querySelectorAll('.slot.drag-over').forEach(s=>s.classList.remove('drag-over'));
+      _dragKey=null;
+    });
+  }
+  el.addEventListener('dragover',e=>{
+    if(_dragKey==null||_dragKey===k)return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect='move';
+  });
+  el.addEventListener('dragenter',()=>{
+    if(_dragKey==null||_dragKey===k)return;
+    el.classList.add('drag-over');
+  });
+  el.addEventListener('dragleave',e=>{
+    if(e.target===el)el.classList.remove('drag-over');
+  });
+  el.addEventListener('drop',e=>{
+    e.preventDefault();
+    el.classList.remove('drag-over');
+    if(_dragKey==null||_dragKey===k)return;
+    const src=S.cells[_dragKey],dst=S.cells[k];
+    if(dst)S.cells[_dragKey]=dst;else delete S.cells[_dragKey];
+    S.cells[k]=src;
+    _dragMoved=true;
+    _suppressAnim=true;
+    lastEdit=k;
+    render();
+  });
   return el;
 }
 
