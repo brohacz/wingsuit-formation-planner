@@ -46,6 +46,14 @@
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 14V6M5 9l3-3 3 3M3 4h10"/></svg>
         Import
       </button>
+      <button class="ico-btn" id="btn-saves" aria-label="Saved formations">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2h8v12l-4-3-4 3z"/></svg>
+        Saved
+      </button>
+      <button class="ico-btn" id="btn-share" aria-label="Copy share link">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="4" cy="8" r="1.7"/><circle cx="12" cy="3.5" r="1.7"/><circle cx="12" cy="12.5" r="1.7"/><path d="M5.5 7.1l5-2.7M5.5 8.9l5 2.7"/></svg>
+        Share
+      </button>
       <button class="ico-btn danger" id="clr" aria-label="Clear pilots in current mode">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h10M6 4V3h4v1M5 4l.5 9h5L11 4"/></svg>
         Clear
@@ -108,6 +116,22 @@
     <div class="mbtns">
       <button class="bprimary" id="import-cancel">Cancel</button>
       <button class="bsuccess" id="import-load">Load formation</button>
+    </div>
+  </div>
+</div>
+
+<div id="modal-saves" style="display:none;" class="overlay" role="dialog" aria-modal="true" aria-labelledby="ms-title">
+  <div class="mcard wide">
+    <h3 id="ms-title">Saved formations</h3>
+    <label for="save-name">Save current formation as…</label>
+    <div class="save-row">
+      <input type="text" id="save-name" placeholder="e.g. Belgian Boogie 2026" maxlength="48" autocomplete="off">
+      <button class="bsuccess" id="save-add">Save</button>
+    </div>
+    <label>Saved locally in this browser</label>
+    <div class="saves-list" id="saves-list"></div>
+    <div class="mbtns">
+      <button class="bprimary" id="saves-close">Close</button>
     </div>
   </div>
 </div>

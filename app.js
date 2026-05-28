@@ -488,9 +488,128 @@ $('import-load').addEventListener('click',()=>{
   }
 });
 
+const SAVES_KEY='wfp:saves';
+function getSaves(){
+  try{return JSON.parse(localStorage.getItem(SAVES_KEY)||'{}');}
+  catch(e){return {};}
+}
+function setSaves(o){
+  try{localStorage.setItem(SAVES_KEY,JSON.stringify(o));return true;}
+  catch(e){return false;}
+}
+
+function renderSavesList(){
+  const list=$('saves-list');
+  const saves=getSaves();
+  const names=Object.keys(saves).sort((a,b)=>a.localeCompare(b));
+  list.innerHTML='';
+  if(!names.length){
+    const e=document.createElement('div');
+    e.className='saves-empty';
+    e.textContent='Nothing saved yet.';
+    list.appendChild(e);
+    return;
+  }
+  for(const n of names){
+    const row=document.createElement('div');
+    row.className='save-item';
+    row.innerHTML=`<span class="save-name-text">${esc(n)}</span>
+      <div class="save-actions">
+        <button class="bprimary" data-act="load">Load</button>
+        <button class="bdanger" data-act="del">Delete</button>
+      </div>`;
+    row.querySelector('[data-act="load"]').addEventListener('click',()=>{
+      const s=getSaves();
+      if(!s[n])return;
+      try{
+        fromJSON(s[n]);
+        hideModal('modal-saves');
+        toast(`Loaded "${n}"`);
+      }catch(e){toast('Failed to load');}
+    });
+    row.querySelector('[data-act="del"]').addEventListener('click',()=>{
+      const s=getSaves();
+      delete s[n];
+      setSaves(s);
+      renderSavesList();
+    });
+    list.appendChild(row);
+  }
+}
+
+function b64encode(str){
+  const bytes=new TextEncoder().encode(str);
+  let bin='';
+  for(const b of bytes)bin+=String.fromCharCode(b);
+  return btoa(bin).replace(/=+$/,'').replace(/\+/g,'-').replace(/\//g,'_');
+}
+function b64decode(s){
+  s=s.replace(/-/g,'+').replace(/_/g,'/');
+  while(s.length%4)s+='=';
+  const bin=atob(s);
+  const bytes=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
+
+function shareURL(){
+  const u=new URL(location.href);
+  u.hash='f='+b64encode(toJSON());
+  return u.toString();
+}
+
+function applyHashIfAny(){
+  const m=location.hash.match(/^#f=(.+)$/);
+  if(!m)return false;
+  try{
+    fromJSON(b64decode(m[1]));
+    toast('Loaded shared formation');
+    return true;
+  }catch(e){
+    toast('Invalid share link');
+    return false;
+  }
+}
+
+$('btn-saves').addEventListener('click',()=>{
+  $('save-name').value='';
+  renderSavesList();
+  showModal('modal-saves');
+  setTimeout(()=>$('save-name').focus(),40);
+});
+$('save-add').addEventListener('click',()=>{
+  const n=$('save-name').value.trim();
+  if(!n)return;
+  const s=getSaves();
+  s[n]=toJSON();
+  if(setSaves(s)){
+    $('save-name').value='';
+    renderSavesList();
+    toast(`Saved "${n}"`);
+  } else {
+    toast('Save failed — storage unavailable');
+  }
+});
+$('save-name').addEventListener('keydown',e=>{
+  if(e.key==='Enter')$('save-add').click();
+});
+$('saves-close').addEventListener('click',()=>hideModal('modal-saves'));
+
+$('btn-share').addEventListener('click',()=>{
+  const url=shareURL();
+  const done=()=>toast('Share link copied');
+  try{
+    navigator.clipboard.writeText(url).then(done,()=>{
+      prompt('Copy this share link:',url);
+    });
+  }catch(e){
+    prompt('Copy this share link:',url);
+  }
+});
+
 document.addEventListener('keydown',e=>{
   if(e.key!=='Escape')return;
-  ['modal-pilot','modal-export','modal-import'].forEach(id=>{
+  ['modal-pilot','modal-export','modal-import','modal-saves'].forEach(id=>{
     if($(id).style.display==='flex')hideModal(id);
   });
 });
@@ -501,4 +620,4 @@ document.querySelectorAll('.overlay').forEach(ov=>{
   });
 });
 
-render();
+if(!applyHashIfAny())render();

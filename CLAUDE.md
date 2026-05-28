@@ -71,6 +71,13 @@ Pilots can be dragged between any two slots (swap or move), from a slot to the b
 
 Backward compat: legacy single-mode exports `{rows, cols, mode, cells, bench}` (no per-mode keys) still load — their `cells`/`bench` go into the export's active `mode`, and every distinct pilot from the legacy data is also pushed onto the *other* mode's bench (deduped via `pilotInMode`). This mirrors the new-pilot propagation rule so legacy imports come up with the full roster available in both shapes.
 
+## Saving and sharing
+
+Two persistence paths beyond export/import JSON, both reusing `toJSON()` / `fromJSON()`:
+
+- **Named local saves** — `localStorage` under the single key `wfp:saves`, a map of `{<name>: <toJSON-string>}`. The Saved modal lets the user save the current formation under a name, then load or delete any entry. `getSaves` / `setSaves` are the only readers/writers; `renderSavesList()` rebuilds the modal contents. Saving with an existing name silently overwrites.
+- **Share-link URL hash** — `shareURL()` builds `<current-url>#f=<base64url-of-toJSON>` and copies it to the clipboard. On page load, `applyHashIfAny()` decodes the hash and feeds it to `fromJSON()`; if no hash (or invalid), the script falls through to `render()`. Base64 is URL-safe (`+/=` rewritten to `-_` with stripped padding) and Unicode-safe via `TextEncoder` / `TextDecoder`. No compression — typical exports fit in URL limits.
+
 ## Conventions to preserve
 
 - Keep the project to these three sibling files (`index.html`, `styles.css`, `app.js`) — no build step, no module bundler, no framework. Plain `<link>` and `<script defer>` only, so `file://` opens still work.
