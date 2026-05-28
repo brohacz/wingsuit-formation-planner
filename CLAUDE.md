@@ -24,20 +24,22 @@ The page is designed to be embedded in (or styled by) a host that provides these
 
 ## State and rendering
 
-Everything hangs off the module-scoped object `S` declared at `app.js:1`. The two formation modes own **separate** `cells` and `bench` so editing one doesn't disturb the other:
+Everything hangs off the module-scoped object `S` declared at `app.js:1`. The two formation modes own **everything separately** — dimensions, cells, and bench — so editing one doesn't disturb the other:
 
 ```js
 S = {
-  rows, cols, mode,                       // shared: grid dimensions and which mode is active
-  regular: { cells: {}, bench: [] },      // pilots assigned/benched in regular mode
-  diamond: { cells: {}, bench: [] }       // pilots assigned/benched in diamond mode
+  mode,                                                       // which mode is active
+  regular: { rows, cols, cells: {}, bench: [] },              // grid: rows × cols
+  diamond: { rows,        cells: {}, bench: [] }              // diamond: rows = widest (no cols)
 }
 ```
+
+The `rows`/`cols` inputs in the topbar read and write `cur().rows` / `cur().cols`; switching modes restores each mode's own dimensions. The cols input is hidden in diamond mode.
 
 - `cur()` (`app.js:8`) returns the active mode's `{cells, bench}`; `other()` (`app.js:9`) returns the inactive one. **Never read `S.cells` or `S.bench` — always go through `cur()` / `other()`.**
 - `cells` is keyed by `"r,c"` strings produced by `key(r, c)` (`app.js:21`). `bench` is a flat array of `{name, color}` objects for pilots who are resting off the formation.
 - Anything that holds a pilot is addressed by a string key. Grid keys are `"r,c"`; bench keys are `"b:<index>"` produced by `bkey(i)` (`app.js:10`). Use the source-agnostic helpers `getPilot(k)`, `setPilot(k, d)`, `removePilot(k)` (`app.js:12`, `app.js:110`, `app.js:106`) — they read/write `cur()` and let drag-and-drop, the edit modal, and trash work uniformly.
-- `mode` is `"regular"` or `"diamond"`. In diamond mode the `cols` control is hidden and row widths are computed by `rowCount(total, r)` (`app.js:181`), which produces a symmetric 1, 2, …, mid+1, …, 2, 1 pattern. The diamond is laid out absolutely inside a sized wrapper so rows stay centered; the regular mode uses CSS grid. `rows`/`cols` are shared between modes (in diamond, `rows` means "widest").
+- `mode` is `"regular"` or `"diamond"`. In diamond mode the `cols` control is hidden and row widths are computed by `rowCount(total, r)` (`app.js:181`), which produces a symmetric 1, 2, …, mid+1, …, 2, 1 pattern. The diamond is laid out absolutely inside a sized wrapper so rows stay centered; the regular mode uses CSS grid. In diamond, `rows` means "widest" — the single integer that determines both the widest row and (implicitly via `2*rows-1`) the total row count.
 - `render()` (`app.js:213`) is the single source of truth for the DOM — every mutation calls it. There is no virtual DOM or diffing; the slot grid and bench are rebuilt on each render. `render()` calls `renderBench()` (`app.js:166`) at the end.
 - `makeSlot()` (`app.js:44`) returns a `.slot` element and inlines the `ws()` SVG (`app.js:24`) for the wingsuit silhouette. Color comes from the cell, size from a parameter.
 
@@ -61,15 +63,17 @@ Pilots can be dragged between any two slots (swap or move), from a slot to the b
 
 ## Import / export
 
-`toJSON()` and `fromJSON()` (`app.js:335`, `app.js:347`) define the persisted shape:
+`toJSON()` and `fromJSON()` define the persisted shape:
 
 ```json
-{"rows":3,"cols":3,"mode":"regular","regular":{"cells":{...},"bench":[...]},"diamond":{"cells":{...},"bench":[...]}}
+{"mode":"regular","regular":{"rows":5,"cols":5,"cells":{...},"bench":[...]},"diamond":{"rows":3,"cells":{...},"bench":[...]}}
 ```
 
-`fromJSON` clamps `rows`/`cols` to 1–12 and coerces `mode` to one of the two valid values. Each mode's `cells`/`bench` are sanitized via `normalizeMode()` (`app.js:339`) — filters bench entries to ones with string `name` and `color`. **Imported JSON is the trust boundary**, so keep validation there if extending the schema.
+`fromJSON` coerces `mode` to one of the two valid values. Each mode's dimensions and `cells`/`bench` are sanitized via `normalizeMode(m, fallbackDims, withCols)`: `rows` (and `cols` if `withCols`) are clamped to 1–12 by `clampDim`, with `fallbackDims` providing a fallback when the per-mode field is missing. Bench entries without string `name` *and* `color` are dropped. **Imported JSON is the trust boundary**, so keep validation there if extending the schema.
 
-Backward compat: legacy single-mode exports `{rows, cols, mode, cells, bench}` (no per-mode keys) still load — their `cells`/`bench` go into the export's active `mode`, and every distinct pilot from the legacy data is also pushed onto the *other* mode's bench (deduped via `pilotInMode`). This mirrors the new-pilot propagation rule so legacy imports come up with the full roster available in both shapes.
+Backward compat handles two older formats via the same path:
+1. Pre-per-mode-state legacy: top-level `{rows, cols, mode, cells, bench}`. The active mode gets the legacy data with its dimensions; the other mode gets the same dimensions as a starting point and every distinct pilot from the legacy data lands on its bench (deduped via `pilotInMode`).
+2. Per-mode-state without per-mode dimensions: `{rows, cols, mode, regular:{cells,bench}, diamond:{cells,bench}}`. Each mode inherits the top-level `rows`/`cols` via `fallbackDims`, then takes over its own dimensions on next save.
 
 ## Saving and sharing
 

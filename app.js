@@ -1,7 +1,7 @@
 const S={
-  rows:3,cols:3,mode:'regular',
-  regular:{cells:{},bench:[]},
-  diamond:{cells:{},bench:[]}
+  mode:'regular',
+  regular:{rows:3,cols:3,cells:{},bench:[]},
+  diamond:{rows:3,cells:{},bench:[]}
 };
 const PALETTE=['#1a1d22','#94a3b8','#f8f9fa','#d93025','#e8590c','#fcc419','#82c91e','#1d9e75','#0ca678','#15aabf','#1971c2','#4263eb','#7950f2','#d6336c'];
 let ekey=null,lastEdit=null,lastFocused=null,_suppressAnim=false,_drag=null,_dragMoved=false;
@@ -185,21 +185,21 @@ function rowCount(widest,r){
 function pilotCount(){return Object.keys(cur().cells).length;}
 function totalSlots(){
   if(S.mode==='diamond'){
-    const w=S.rows,n=2*w-1;
+    const w=cur().rows,n=2*w-1;
     let t=0;for(let r=0;r<n;r++)t+=rowCount(w,r);
     return t;
   }
-  return S.rows*S.cols;
+  return cur().rows*cur().cols;
 }
 
 function updateReadout(){
   const filled=pilotCount(),total=totalSlots();
   let layout;
   if(S.mode==='diamond'){
-    const w=S.rows,n=2*w-1;
+    const w=cur().rows,n=2*w-1;
     layout=`<span class="tag">Diamond</span> <span>widest <strong>${w}</strong></span> <span class="dot">·</span> <span><strong>${n}</strong> rows</span>`;
   } else {
-    layout=`<span class="tag">Grid</span> <span><strong>${S.rows}</strong> × <strong>${S.cols}</strong></span>`;
+    layout=`<span class="tag">Grid</span> <span><strong>${cur().rows}</strong> × <strong>${cur().cols}</strong></span>`;
   }
   $('readout').innerHTML=`
     <span>Formation</span>
@@ -216,10 +216,12 @@ function render(){
   $('cols-ctrl').style.display=isDia?'none':'flex';
   $('cols-sep').style.display=isDia?'none':'block';
   $('rows-label').textContent=isDia?'Widest':'Rows';
+  $('rows').value=cur().rows;
+  if(!isDia)$('cols').value=cur().cols;
   updateReadout();
   let i=0;
   if(isDia){
-    const widest=S.rows,nrows=2*widest-1;
+    const widest=cur().rows,nrows=2*widest-1;
     const cW=114,cH=130,gX=8,gY=8,sX=cW+gX,sY=cH+gY;
     const canW=widest*sX,canH=nrows*sY;
     const wrap=document.createElement('div');
@@ -250,9 +252,9 @@ function render(){
   } else {
     const grid=document.createElement('div');
     grid.className='rgrid';
-    grid.style.cssText=`grid-template-columns:repeat(${S.cols},114px);grid-auto-rows:130px;width:${S.cols*114}px;gap:0;`;
-    for(let r=0;r<S.rows;r++)
-      for(let c=0;c<S.cols;c++){
+    grid.style.cssText=`grid-template-columns:repeat(${cur().cols},114px);grid-auto-rows:130px;width:${cur().cols*114}px;gap:0;`;
+    for(let r=0;r<cur().rows;r++)
+      for(let c=0;c<cur().cols;c++){
         const k=key(r,c),d=cur().cells[k];
         const slot=makeSlot(k,d,i++,{width:'114px',height:'130px'});
         grid.appendChild(slot);
@@ -334,31 +336,40 @@ function toast(msg){
 }
 
 function toJSON(){
-  return JSON.stringify({rows:S.rows,cols:S.cols,mode:S.mode,regular:S.regular,diamond:S.diamond},null,2);
+  return JSON.stringify({mode:S.mode,regular:S.regular,diamond:S.diamond},null,2);
 }
 
-function normalizeMode(m){
-  if(!m||typeof m!=='object')return {cells:{},bench:[]};
-  return {
+function clampDim(n,fallback){
+  const v=typeof n==='number'?n:fallback;
+  return Math.max(1,Math.min(12,v||3));
+}
+
+function normalizeMode(m,fallbackDims,withCols){
+  if(!m||typeof m!=='object')m={};
+  const out={
+    rows:clampDim(m.rows,fallbackDims&&fallbackDims.rows),
     cells:(m.cells&&typeof m.cells==='object')?m.cells:{},
     bench:Array.isArray(m.bench)?m.bench.filter(p=>p&&typeof p.name==='string'&&typeof p.color==='string'):[]
   };
+  if(withCols)out.cols=clampDim(m.cols,fallbackDims&&fallbackDims.cols);
+  return out;
 }
 
 function fromJSON(str){
   const d=JSON.parse(str);
-  if(typeof d.rows!=='number'||typeof d.mode!=='string')throw new Error('Invalid format');
-  S.rows=Math.max(1,Math.min(12,d.rows));
-  S.cols=Math.max(1,Math.min(12,d.cols||3));
+  if(typeof d.mode!=='string')throw new Error('Invalid format');
   S.mode=d.mode==='diamond'?'diamond':'regular';
+  const topDims={rows:d.rows,cols:d.cols};
   if(d.regular||d.diamond){
-    S.regular=normalizeMode(d.regular);
-    S.diamond=normalizeMode(d.diamond);
+    S.regular=normalizeMode(d.regular,topDims,true);
+    S.diamond=normalizeMode(d.diamond,topDims,false);
   } else if(typeof d.cells==='object'){
-    S.regular={cells:{},bench:[]};
-    S.diamond={cells:{},bench:[]};
-    const legacy=normalizeMode(d);
-    S[S.mode]=legacy;
+    const legacy=normalizeMode(d,topDims,true);
+    S.regular={rows:legacy.rows,cols:legacy.cols,cells:{},bench:[]};
+    S.diamond={rows:legacy.rows,cells:{},bench:[]};
+    S[S.mode]=S.mode==='regular'
+      ?{rows:legacy.rows,cols:legacy.cols,cells:legacy.cells,bench:legacy.bench}
+      :{rows:legacy.rows,cells:legacy.cells,bench:legacy.bench};
     const o=S.mode==='regular'?'diamond':'regular';
     for(const k in legacy.cells){
       const p=legacy.cells[k];
@@ -368,8 +379,6 @@ function fromJSON(str){
       if(!pilotInMode(p.name,S[o]))S[o].bench.push({name:p.name,color:p.color});
     }
   } else throw new Error('Invalid format');
-  $('rows').value=S.rows;
-  $('cols').value=S.cols;
   document.querySelectorAll('.seg-btn').forEach(b=>{
     const on=b.dataset.mode===S.mode;
     b.classList.toggle('on',on);
@@ -407,13 +416,13 @@ $('pname').addEventListener('keydown',e=>{
 });
 
 $('rows').addEventListener('change',e=>{
-  S.rows=Math.max(1,Math.min(12,+e.target.value||1));
-  e.target.value=S.rows;
+  cur().rows=Math.max(1,Math.min(12,+e.target.value||1));
+  e.target.value=cur().rows;
   render();
 });
 $('cols').addEventListener('change',e=>{
-  S.cols=Math.max(1,Math.min(12,+e.target.value||1));
-  e.target.value=S.cols;
+  cur().cols=Math.max(1,Math.min(12,+e.target.value||1));
+  e.target.value=cur().cols;
   render();
 });
 document.querySelectorAll('.seg-btn').forEach(b=>{
