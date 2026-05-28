@@ -24,30 +24,57 @@ The page is designed to be embedded in (or styled by) a host that provides these
 
 ## State and rendering
 
-Everything hangs off the module-scoped object `S = {rows, cols, mode, cells, bench}` declared at `app.js:1`.
+Everything hangs off the module-scoped object `S` declared at `app.js:1`. The two formation modes own **separate** `cells` and `bench` so editing one doesn't disturb the other:
 
-- `cells` is keyed by `"r,c"` strings produced by `key(r, c)` (`app.js:9`). `bench` is a flat array of `{name, color}` objects for pilots who are resting off the formation.
-- Anything that holds a pilot is addressed by a string key. Grid keys are `"r,c"`; bench keys are `"b:<index>"` produced by `bkey(i)` (`app.js:4`). Use the source-agnostic helpers `getPilot(k)`, `setPilot(k, d)`, `removePilot(k)` (`app.js:6`, `app.js:98`, `app.js:94`) instead of poking `S.cells` / `S.bench` directly — that's what lets drag-and-drop, the edit modal, and trash work uniformly across both.
-- `mode` is `"regular"` or `"diamond"`. In diamond mode the `cols` control is hidden and row widths are computed by `rowCount(total, r)` (`app.js:168`), which produces a symmetric 1, 2, …, mid+1, …, 2, 1 pattern. The diamond is laid out absolutely inside a sized wrapper so rows stay centered; the regular mode uses CSS grid.
-- `render()` (`app.js:200`) is the single source of truth for the DOM — every mutation calls it. There is no virtual DOM or diffing; the slot grid and bench are rebuilt on each render. `render()` calls `renderBench()` (`app.js:154`) at the end.
-- `makeSlot()` (`app.js:32`) returns a `.slot` element and inlines the `ws()` SVG (`app.js:12`) for the wingsuit silhouette. Color comes from the cell, size from a parameter.
+```js
+S = {
+  rows, cols, mode,                       // shared: grid dimensions and which mode is active
+  regular: { cells: {}, bench: [] },      // pilots assigned/benched in regular mode
+  diamond: { cells: {}, bench: [] }       // pilots assigned/benched in diamond mode
+}
+```
+
+- `cur()` (`app.js:8`) returns the active mode's `{cells, bench}`; `other()` (`app.js:9`) returns the inactive one. **Never read `S.cells` or `S.bench` — always go through `cur()` / `other()`.**
+- `cells` is keyed by `"r,c"` strings produced by `key(r, c)` (`app.js:21`). `bench` is a flat array of `{name, color}` objects for pilots who are resting off the formation.
+- Anything that holds a pilot is addressed by a string key. Grid keys are `"r,c"`; bench keys are `"b:<index>"` produced by `bkey(i)` (`app.js:10`). Use the source-agnostic helpers `getPilot(k)`, `setPilot(k, d)`, `removePilot(k)` (`app.js:12`, `app.js:110`, `app.js:106`) — they read/write `cur()` and let drag-and-drop, the edit modal, and trash work uniformly.
+- `mode` is `"regular"` or `"diamond"`. In diamond mode the `cols` control is hidden and row widths are computed by `rowCount(total, r)` (`app.js:181`), which produces a symmetric 1, 2, …, mid+1, …, 2, 1 pattern. The diamond is laid out absolutely inside a sized wrapper so rows stay centered; the regular mode uses CSS grid. `rows`/`cols` are shared between modes (in diamond, `rows` means "widest").
+- `render()` (`app.js:213`) is the single source of truth for the DOM — every mutation calls it. There is no virtual DOM or diffing; the slot grid and bench are rebuilt on each render. `render()` calls `renderBench()` (`app.js:166`) at the end.
+- `makeSlot()` (`app.js:44`) returns a `.slot` element and inlines the `ws()` SVG (`app.js:24`) for the wingsuit silhouette. Color comes from the cell, size from a parameter.
+
+## Cross-mode propagation
+
+The two modes are otherwise isolated, with one exception: when a pilot is **created** (an empty slot is filled via the edit modal), they are also copied to the *other* mode's bench so the same roster is available in both shapes. The propagation rules:
+
+- Trigger: `msav` handler, slot was empty (`getPilot(ekey)` returned undefined), name is non-empty, target is a slot (not the bench).
+- Skipped if a pilot with the same case-insensitive trimmed name already exists in the other mode (in either cells or bench) — see `pilotInMode(name, m)` (`app.js:13`).
+- Edits, drags, removes, and trash drops do *not* propagate. Mode-isolated state means each mode owns its own positions and color choices.
+- The "Clear" button clears only the current mode.
 
 ## Drag-and-drop
 
 Pilots can be dragged between any two slots (swap or move), from a slot to the bench (rest), from the bench back to a slot (deploy, swapping if occupied), and from either source onto the trash zone (remove).
 
 - A single module-level `_drag = {src: <key>}` holds the active drag source while a gesture is in flight; it is cleared on `dragend`.
-- `attachDragSource(el, k)` (`app.js:57`) makes any element a drag source; `attachSlotDropTarget(el, k)` makes any slot a drop target. The bench-zone and trash-zone listeners are wired separately at the bottom of `app.js` (they live outside the per-slot rebuild, so they survive `render()`).
-- The drop reducers are `dropOnSlot`, `dropOnBench`, `dropOnTrash` (`app.js:103`, `app.js:114`, `app.js:130`). They mutate `S` then call `render()`.
+- `attachDragSource(el, k)` (`app.js:69`) makes any element a drag source; `attachSlotDropTarget(el, k)` (`app.js:85`) makes any slot a drop target. The bench-zone and trash-zone listeners are wired separately at the bottom of `app.js` (they live outside the per-slot rebuild, so they survive `render()`).
+- The drop reducers are `dropOnSlot`, `dropOnBench`, `dropOnTrash` (`app.js:115`, `app.js:126`, `app.js:142`). They mutate the current mode via `cur()` then call `render()`.
 - After a drop, `_dragMoved` is set so the source's `click` handler skips opening the edit modal once.
 
 ## Import / export
 
-`toJSON()` and `fromJSON()` (`app.js:322`, `app.js:326`) define the persisted shape: `{rows, cols, mode, cells, bench}`. `fromJSON` clamps `rows`/`cols` to 1–12, coerces `mode` to one of the two valid values, and filters `bench` entries to ones with string `name` and `color` — imported JSON is the trust boundary, so keep validation there if extending the schema. Older exports without `bench` still load (it defaults to `[]`).
+`toJSON()` and `fromJSON()` (`app.js:335`, `app.js:347`) define the persisted shape:
+
+```json
+{"rows":3,"cols":3,"mode":"regular","regular":{"cells":{...},"bench":[...]},"diamond":{"cells":{...},"bench":[...]}}
+```
+
+`fromJSON` clamps `rows`/`cols` to 1–12 and coerces `mode` to one of the two valid values. Each mode's `cells`/`bench` are sanitized via `normalizeMode()` (`app.js:339`) — filters bench entries to ones with string `name` and `color`. **Imported JSON is the trust boundary**, so keep validation there if extending the schema.
+
+Backward compat: legacy single-mode exports `{rows, cols, mode, cells, bench}` (no per-mode keys) still load — their `cells`/`bench` go into the export's active `mode`, and every distinct pilot from the legacy data is also pushed onto the *other* mode's bench (deduped via `pilotInMode`). This mirrors the new-pilot propagation rule so legacy imports come up with the full roster available in both shapes.
 
 ## Conventions to preserve
 
 - Keep the project to these three sibling files (`index.html`, `styles.css`, `app.js`) — no build step, no module bundler, no framework. Plain `<link>` and `<script defer>` only, so `file://` opens still work.
-- Keep identifiers short (the existing code uses `S`, `ws`, `ekey`, `cnt`, `sx`, `rW`, etc.). Don't "modernize" them piecemeal.
+- Keep identifiers short (the existing code uses `S`, `ws`, `ekey`, `cnt`, `sx`, `rW`, `cur`, etc.). Don't "modernize" them piecemeal.
 - After any state mutation, call `render()` rather than patching the DOM in place.
 - Address pilots through the `getPilot` / `setPilot` / `removePilot` helpers when the source could be either a slot or the bench. Only the helpers know the `"b:N"` vs `"r,c"` distinction.
+- Always read mode-scoped state through `cur()` / `other()`. Directly touching `S.regular` / `S.diamond` is fine when you genuinely need to reach into a specific mode (e.g., the new-pilot propagation does `other().bench.push(...)`), but avoid hard-coding `'regular'` / `'diamond'` strings in business logic — let `cur()` and `other()` flip with `S.mode`.

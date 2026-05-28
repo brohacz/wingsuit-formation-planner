@@ -1,9 +1,21 @@
-const S={rows:3,cols:3,mode:'regular',cells:{},bench:[]};
+const S={
+  rows:3,cols:3,mode:'regular',
+  regular:{cells:{},bench:[]},
+  diamond:{cells:{},bench:[]}
+};
 const PALETTE=['#1a1d22','#94a3b8','#f8f9fa','#d93025','#e8590c','#fcc419','#82c91e','#1d9e75','#0ca678','#15aabf','#1971c2','#4263eb','#7950f2','#d6336c'];
 let ekey=null,lastEdit=null,lastFocused=null,_suppressAnim=false,_drag=null,_dragMoved=false;
+function cur(){return S[S.mode];}
+function other(){return S[S.mode==='regular'?'diamond':'regular'];}
 function bkey(i){return 'b:'+i;}
 function isBench(k){return typeof k==='string'&&k.startsWith('b:');}
-function getPilot(k){return isBench(k)?S.bench[+k.slice(2)]:S.cells[k];}
+function getPilot(k){return isBench(k)?cur().bench[+k.slice(2)]:cur().cells[k];}
+function pilotInMode(name,m){
+  const lo=name.toLowerCase().trim();
+  if(!lo)return false;
+  for(const k in m.cells)if(m.cells[k].name.toLowerCase().trim()===lo)return true;
+  return m.bench.some(p=>p.name.toLowerCase().trim()===lo);
+}
 const $=id=>document.getElementById(id);
 
 function key(r,c){return r+','+c;}
@@ -92,12 +104,12 @@ function attachSlotDropTarget(el,k){
 }
 
 function removePilot(k){
-  if(isBench(k))S.bench.splice(+k.slice(2),1);
-  else delete S.cells[k];
+  if(isBench(k))cur().bench.splice(+k.slice(2),1);
+  else delete cur().cells[k];
 }
 function setPilot(k,d){
-  if(isBench(k))S.bench[+k.slice(2)]=d;
-  else S.cells[k]=d;
+  if(isBench(k))cur().bench[+k.slice(2)]=d;
+  else cur().cells[k]=d;
 }
 
 function dropOnSlot(srcK,dstK){
@@ -116,11 +128,11 @@ function dropOnBench(srcK){
   if(!src)return;
   if(isBench(srcK)){
     const i=+srcK.slice(2);
-    S.bench.splice(i,1);
-    S.bench.push(src);
+    cur().bench.splice(i,1);
+    cur().bench.push(src);
   } else {
-    delete S.cells[srcK];
-    S.bench.push(src);
+    delete cur().cells[srcK];
+    cur().bench.push(src);
   }
   _dragMoved=true;
   _suppressAnim=true;
@@ -154,22 +166,23 @@ function makeBenchItem(d,i){
 function renderBench(){
   const list=$('bench-list');
   list.innerHTML='';
-  $('bench-count').textContent=S.bench.length;
-  if(!S.bench.length){
+  const bench=cur().bench;
+  $('bench-count').textContent=bench.length;
+  if(!bench.length){
     const empty=document.createElement('div');
     empty.className='bench-empty';
     empty.textContent='Drop pilots here to rest';
     list.appendChild(empty);
     return;
   }
-  S.bench.forEach((d,i)=>list.appendChild(makeBenchItem(d,i)));
+  bench.forEach((d,i)=>list.appendChild(makeBenchItem(d,i)));
 }
 
 function rowCount(widest,r){
   return widest-Math.abs(r-widest+1);
 }
 
-function pilotCount(){return Object.keys(S.cells).length;}
+function pilotCount(){return Object.keys(cur().cells).length;}
 function totalSlots(){
   if(S.mode==='diamond'){
     const w=S.rows,n=2*w-1;
@@ -228,7 +241,7 @@ function render(){
       const cnt=rowCount(widest,r);
       const rW=cnt*sX-gX,sx=(canW-rW)/2,y=r*sY;
       for(let c=0;c<cnt;c++){
-        const k=key(r,c),d=S.cells[k],x=sx+c*sX;
+        const k=key(r,c),d=cur().cells[k],x=sx+c*sX;
         const slot=makeSlot(k,d,i++,{left:Math.round(x)+'px',top:Math.round(y)+'px',width:cW+'px',height:cH+'px',position:'absolute'});
         wrap.appendChild(slot);
       }
@@ -240,7 +253,7 @@ function render(){
     grid.style.cssText=`grid-template-columns:repeat(${S.cols},114px);grid-auto-rows:130px;width:${S.cols*114}px;gap:0;`;
     for(let r=0;r<S.rows;r++)
       for(let c=0;c<S.cols;c++){
-        const k=key(r,c),d=S.cells[k];
+        const k=key(r,c),d=cur().cells[k];
         const slot=makeSlot(k,d,i++,{width:'114px',height:'130px'});
         grid.appendChild(slot);
       }
@@ -320,17 +333,40 @@ function toast(msg){
 }
 
 function toJSON(){
-  return JSON.stringify({rows:S.rows,cols:S.cols,mode:S.mode,cells:S.cells,bench:S.bench},null,2);
+  return JSON.stringify({rows:S.rows,cols:S.cols,mode:S.mode,regular:S.regular,diamond:S.diamond},null,2);
+}
+
+function normalizeMode(m){
+  if(!m||typeof m!=='object')return {cells:{},bench:[]};
+  return {
+    cells:(m.cells&&typeof m.cells==='object')?m.cells:{},
+    bench:Array.isArray(m.bench)?m.bench.filter(p=>p&&typeof p.name==='string'&&typeof p.color==='string'):[]
+  };
 }
 
 function fromJSON(str){
   const d=JSON.parse(str);
-  if(typeof d.rows!=='number'||typeof d.mode!=='string'||typeof d.cells!=='object')throw new Error('Invalid format');
+  if(typeof d.rows!=='number'||typeof d.mode!=='string')throw new Error('Invalid format');
   S.rows=Math.max(1,Math.min(12,d.rows));
   S.cols=Math.max(1,Math.min(12,d.cols||3));
   S.mode=d.mode==='diamond'?'diamond':'regular';
-  S.cells=d.cells||{};
-  S.bench=Array.isArray(d.bench)?d.bench.filter(p=>p&&typeof p.name==='string'&&typeof p.color==='string'):[];
+  if(d.regular||d.diamond){
+    S.regular=normalizeMode(d.regular);
+    S.diamond=normalizeMode(d.diamond);
+  } else if(typeof d.cells==='object'){
+    S.regular={cells:{},bench:[]};
+    S.diamond={cells:{},bench:[]};
+    const legacy=normalizeMode(d);
+    S[S.mode]=legacy;
+    const o=S.mode==='regular'?'diamond':'regular';
+    for(const k in legacy.cells){
+      const p=legacy.cells[k];
+      if(!pilotInMode(p.name,S[o]))S[o].bench.push({name:p.name,color:p.color});
+    }
+    for(const p of legacy.bench){
+      if(!pilotInMode(p.name,S[o]))S[o].bench.push({name:p.name,color:p.color});
+    }
+  } else throw new Error('Invalid format');
   $('rows').value=S.rows;
   $('cols').value=S.cols;
   document.querySelectorAll('.seg-btn').forEach(b=>{
@@ -346,8 +382,14 @@ renderSwatches();
 $('pname').addEventListener('input',prevUpdate);
 $('msav').addEventListener('click',()=>{
   const n=$('pname').value.trim(),c=$('pcol').value;
-  if(n){setPilot(ekey,{name:n,color:c});if(!isBench(ekey))lastEdit=ekey;}
-  else removePilot(ekey);
+  const wasNew=!getPilot(ekey);
+  if(n){
+    setPilot(ekey,{name:n,color:c});
+    if(!isBench(ekey))lastEdit=ekey;
+    if(wasNew&&!isBench(ekey)&&!pilotInMode(n,other())){
+      other().bench.push({name:n,color:c});
+    }
+  } else removePilot(ekey);
   hideModal('modal-pilot');
   _suppressAnim=true;
   render();
@@ -385,7 +427,7 @@ document.querySelectorAll('.seg-btn').forEach(b=>{
     render();
   });
 });
-$('clr').addEventListener('click',()=>{S.cells={};S.bench=[];render();});
+$('clr').addEventListener('click',()=>{cur().cells={};cur().bench=[];render();});
 
 ['bench-zone','trash-zone'].forEach(id=>{
   const z=$(id),onTrash=id==='trash-zone';
