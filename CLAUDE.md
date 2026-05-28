@@ -8,9 +8,13 @@ A browser-based planner for **wingsuit flying formations** — coordinated shape
 
 ## Project shape
 
-A single self-contained file: `index.html`. No build system, no package manager, no tests, no dependencies. Vanilla HTML + CSS + JavaScript in one document.
+Three sibling files, no build system, no package manager, no tests, no dependencies:
 
-To run: open `index.html` in a browser, or serve the directory (e.g. `python3 -m http.server`) and visit it.
+- `index.html` — markup only (page chrome, toolbar, formation container, bench/trash zones, modals).
+- `styles.css` — all styling and design tokens. Linked from `<head>`.
+- `app.js` — all behavior (state, rendering, drag-and-drop, import/export). Loaded with `defer` so it runs after the DOM is parsed.
+
+To run: open `index.html` in a browser, or serve the directory (e.g. `python3 -m http.server`) and visit it. The three files are loaded with relative paths so the open-the-file workflow still works over `file://`.
 
 ## Design-token assumption
 
@@ -20,19 +24,30 @@ The page is designed to be embedded in (or styled by) a host that provides these
 
 ## State and rendering
 
-Everything hangs off the module-scoped object `S = {rows, cols, mode, cells}` declared at `index.html:140`.
+Everything hangs off the module-scoped object `S = {rows, cols, mode, cells, bench}` declared at `app.js:1`.
 
-- `cells` is keyed by `"r,c"` strings produced by `key(r, c)` (`index.html:144`). Removing a pilot is `delete S.cells[k]`; assigning is `S.cells[k] = {name, color}`.
-- `mode` is `"regular"` or `"diamond"`. In diamond mode the `cols` control is hidden and row widths are computed by `rowCount(total, r)` (`index.html:164`), which produces a symmetric 1, 2, …, mid+1, …, 2, 1 pattern. The diamond is laid out absolutely inside a sized wrapper so rows stay centered; the regular mode uses CSS grid.
-- `render()` (`index.html:169`) is the single source of truth for the DOM — every mutation calls it. There is no virtual DOM or diffing; the slot grid is rebuilt on each render.
-- `makeSlot()` (`index.html:151`) returns a `.slot` element and inlines the `ws()` SVG (`index.html:146`) for the wingsuit silhouette. Color comes from the cell, size from a parameter.
+- `cells` is keyed by `"r,c"` strings produced by `key(r, c)` (`app.js:9`). `bench` is a flat array of `{name, color}` objects for pilots who are resting off the formation.
+- Anything that holds a pilot is addressed by a string key. Grid keys are `"r,c"`; bench keys are `"b:<index>"` produced by `bkey(i)` (`app.js:4`). Use the source-agnostic helpers `getPilot(k)`, `setPilot(k, d)`, `removePilot(k)` (`app.js:6`, `app.js:98`, `app.js:94`) instead of poking `S.cells` / `S.bench` directly — that's what lets drag-and-drop, the edit modal, and trash work uniformly across both.
+- `mode` is `"regular"` or `"diamond"`. In diamond mode the `cols` control is hidden and row widths are computed by `rowCount(total, r)` (`app.js:168`), which produces a symmetric 1, 2, …, mid+1, …, 2, 1 pattern. The diamond is laid out absolutely inside a sized wrapper so rows stay centered; the regular mode uses CSS grid.
+- `render()` (`app.js:200`) is the single source of truth for the DOM — every mutation calls it. There is no virtual DOM or diffing; the slot grid and bench are rebuilt on each render. `render()` calls `renderBench()` (`app.js:154`) at the end.
+- `makeSlot()` (`app.js:32`) returns a `.slot` element and inlines the `ws()` SVG (`app.js:12`) for the wingsuit silhouette. Color comes from the cell, size from a parameter.
+
+## Drag-and-drop
+
+Pilots can be dragged between any two slots (swap or move), from a slot to the bench (rest), from the bench back to a slot (deploy, swapping if occupied), and from either source onto the trash zone (remove).
+
+- A single module-level `_drag = {src: <key>}` holds the active drag source while a gesture is in flight; it is cleared on `dragend`.
+- `attachDragSource(el, k)` (`app.js:57`) makes any element a drag source; `attachSlotDropTarget(el, k)` makes any slot a drop target. The bench-zone and trash-zone listeners are wired separately at the bottom of `app.js` (they live outside the per-slot rebuild, so they survive `render()`).
+- The drop reducers are `dropOnSlot`, `dropOnBench`, `dropOnTrash` (`app.js:103`, `app.js:114`, `app.js:130`). They mutate `S` then call `render()`.
+- After a drop, `_dragMoved` is set so the source's `click` handler skips opening the edit modal once.
 
 ## Import / export
 
-`toJSON()` and `fromJSON()` (`index.html:231`, `index.html:235`) define the persisted shape: `{rows, cols, mode, cells}`. `fromJSON` clamps `rows`/`cols` to 1–12 and coerces `mode` to one of the two valid values, so imported JSON is the trust boundary — keep validation there if extending the schema.
+`toJSON()` and `fromJSON()` (`app.js:322`, `app.js:326`) define the persisted shape: `{rows, cols, mode, cells, bench}`. `fromJSON` clamps `rows`/`cols` to 1–12, coerces `mode` to one of the two valid values, and filters `bench` entries to ones with string `name` and `color` — imported JSON is the trust boundary, so keep validation there if extending the schema. Older exports without `bench` still load (it defaults to `[]`).
 
 ## Conventions to preserve
 
-- Keep the project a single static file unless there's a strong reason to split.
+- Keep the project to these three sibling files (`index.html`, `styles.css`, `app.js`) — no build step, no module bundler, no framework. Plain `<link>` and `<script defer>` only, so `file://` opens still work.
 - Keep identifiers short (the existing code uses `S`, `ws`, `ekey`, `cnt`, `sx`, `rW`, etc.). Don't "modernize" them piecemeal.
 - After any state mutation, call `render()` rather than patching the DOM in place.
+- Address pilots through the `getPilot` / `setPilot` / `removePilot` helpers when the source could be either a slot or the bench. Only the helpers know the `"b:N"` vs `"r,c"` distinction.
