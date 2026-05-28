@@ -65,10 +65,27 @@ The three modes are otherwise isolated, with one exception: when a pilot is **cr
 
 Pilots can be dragged between any two slots (swap or move), from a slot to the bench (rest), from the bench back to a slot (deploy, swapping if occupied), and from either source onto the trash zone (remove).
 
-- A single module-level `_drag = {src: <key>}` holds the active drag source while a gesture is in flight; it is cleared on `dragend`.
-- `attachDragSource(el, k)` (`app.js:69`) makes any element a drag source; `attachSlotDropTarget(el, k)` (`app.js:85`) makes any slot a drop target. The bench-zone and trash-zone listeners are wired separately at the bottom of `app.js` (they live outside the per-slot rebuild, so they survive `render()`).
-- The drop reducers are `dropOnSlot`, `dropOnBench`, `dropOnTrash` (`app.js:115`, `app.js:126`, `app.js:142`). They mutate the current mode via `cur()` then call `render()`.
+- A single module-level `_drag = {src: <key>, multi?}` holds the active drag source while a gesture is in flight; it is cleared on `dragend`. The optional `multi` field holds the captured offset map when the gesture is a multi-drag.
+- `attachDragSource(el, k)` makes any element a drag source; `attachSlotDropTarget(el, k)` makes any slot a drop target. The bench-zone and trash-zone listeners are wired separately at the bottom of `app.js` (they live outside the per-slot rebuild, so they survive `render()`).
+- The drop reducers are `dropOnSlot`, `dropOnBench`, `dropOnTrash`. They mutate the current mode via `cur()` then call `render()`. Each one branches early to a multi-drag variant when `_drag.multi` is set.
 - After a drop, `_dragMoved` is set so the source's `click` handler skips opening the edit modal once.
+
+## Selection and multi-move
+
+`_selected = new Set<key>` holds the currently selected slot keys (per-mode; mode switching clears it). Three ways to populate it:
+
+- **Rubber-band**: `setupRubberBand()` listens on `#fw` for `mousedown` (left button, not on any `.slot` or `button`). It creates a `position:fixed` `.rubber-band` div on the document body once movement crosses 4 px, then on every `mousemove` re-computes which filled-slot bounding-rect centers fall inside the rectangle (`getBoundingClientRect`). Shift+rubber-band is additive (the prior `_selected` is treated as the baseline).
+- **Cmd/Ctrl+click** on a filled slot: `toggleSelect(k)`.
+- **Esc** or **click in empty canvas**: `clearSelection()`. The Esc handler skips clearing when it's actually dismissing an open modal.
+
+Selection visual: `.slot.selected` adds an outline and bumps `z-index` so the selection sits above neighboring filled/empty slots. `applySelectedVisual()` re-applies the class after every `render()` rebuild.
+
+**Multi-drag**: in `attachDragSource`'s `dragstart`, if the dragged key is in `_selected` and there's more than one selected, it captures `multi = computeMultiOffsets(leadKey)` — a list of `{key, dr, dc}` offsets from the lead. On drop:
+
+- `dropOnSlot` → `dropMultiOnSlot` computes each pilot's target as `(dropR + dr, dropC + dc)` and validates: every target must be in-bounds for the active mode (`isValidSlot` knows the regular/diamond/freeform shape), no two targets can collide, and no target may land on a non-selected occupied slot. Any failure rejects the move with a toast; on success, sources are cleared first then targets are written, and `_selected` is rewritten to the new keys.
+- `dropOnBench` / `dropOnTrash` apply to all selected slots at once (bench: move each to the bench, dedupe by source; trash: remove each).
+
+Dragging an unselected pilot clears the selection first (single-drag from then on). Dragging a selected pilot tags every other `.selected` slot with `.dragging` so they dim together until drop.
 
 ## Import / export
 

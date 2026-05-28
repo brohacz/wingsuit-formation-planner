@@ -7,6 +7,7 @@ const S={
 };
 const PALETTE=['#1a1d22','#94a3b8','#f8f9fa','#d93025','#e8590c','#fcc419','#82c91e','#1d9e75','#0ca678','#15aabf','#1971c2','#4263eb','#7950f2','#d6336c'];
 let ekey=null,lastEdit=null,lastFocused=null,_suppressAnim=false,_drag=null,_dragMoved=false;
+let _selected=new Set();
 function cur(){return S[S.mode];}
 function others(){return MODES.filter(m=>m!==S.mode).map(m=>S[m]);}
 function bkey(i){return 'b:'+i;}
@@ -61,8 +62,9 @@ function makeSlot(k,d,i,extra,compact,noDropTarget){
     ? `<div class="slot-svg">${ws(d.color,40)}</div><div class="slot-name">${esc(d.name||'(unnamed)')}</div>`
     : `<div class="slot-cross"></div>`;
   el.innerHTML=inner;
-  el.addEventListener('click',()=>{
+  el.addEventListener('click',e=>{
     if(_dragMoved){_dragMoved=false;return;}
+    if((e.metaKey||e.ctrlKey)&&d){toggleSelect(k);return;}
     openModal(k);
   });
   if(d) attachDragSource(el,k);
@@ -73,17 +75,87 @@ function makeSlot(k,d,i,extra,compact,noDropTarget){
 function attachDragSource(el,k){
   el.draggable=true;
   el.addEventListener('dragstart',e=>{
-    _drag={src:k};
+    let multi=null;
+    if(_selected.has(k)&&_selected.size>1){
+      multi=computeMultiOffsets(k);
+      document.querySelectorAll('.slot.selected').forEach(s=>s.classList.add('dragging'));
+    } else {
+      el.classList.add('dragging');
+      if(!_selected.has(k))clearSelection();
+    }
+    _drag={src:k,multi:multi};
     _dragMoved=false;
     e.dataTransfer.effectAllowed='move';
     e.dataTransfer.setData('text/plain',k);
-    el.classList.add('dragging');
   });
   el.addEventListener('dragend',()=>{
-    el.classList.remove('dragging');
+    document.querySelectorAll('.dragging').forEach(s=>s.classList.remove('dragging'));
     document.querySelectorAll('.drag-over').forEach(s=>s.classList.remove('drag-over'));
     _drag=null;
   });
+}
+
+function applySelectedVisual(){
+  document.querySelectorAll('.slot[data-key]').forEach(el=>{
+    el.classList.toggle('selected',_selected.has(el.dataset.key));
+  });
+}
+function clearSelection(){
+  if(!_selected.size)return;
+  _selected.clear();
+  applySelectedVisual();
+}
+function toggleSelect(k){
+  if(_selected.has(k))_selected.delete(k);
+  else _selected.add(k);
+  applySelectedVisual();
+}
+
+function computeMultiOffsets(leadKey){
+  const [lr,lc]=leadKey.split(',').map(Number);
+  const offsets=[];
+  for(const k of _selected){
+    if(k===leadKey)continue;
+    const [r,c]=k.split(',').map(Number);
+    offsets.push({key:k,dr:r-lr,dc:c-lc});
+  }
+  return {leadKey,offsets};
+}
+
+function isValidSlot(k){
+  const [a,b]=k.split(',').map(Number);
+  if(a<0||b<0)return false;
+  if(S.mode==='regular')return a<cur().rows&&b<cur().cols;
+  if(S.mode==='diamond'){
+    const widest=cur().rows,nrows=2*widest-1;
+    if(a>=nrows)return false;
+    return b<rowCount(widest,a);
+  }
+  return a<cur().rows&&b<(2*cur().cols-1);
+}
+
+function dropMultiOnSlot(multi,dstK){
+  const [dr,dc]=dstK.split(',').map(Number);
+  const moves=[{from:multi.leadKey,to:dstK}];
+  for(const o of multi.offsets){
+    moves.push({from:o.key,to:key(dr+o.dr,dc+o.dc)});
+  }
+  const sources=new Set(moves.map(m=>m.from));
+  const targets=new Set();
+  for(const m of moves){
+    if(!isValidSlot(m.to)){toast('Move blocked — out of bounds');return;}
+    if(targets.has(m.to)){toast('Move blocked — collision');return;}
+    targets.add(m.to);
+    const existing=getPilot(m.to);
+    if(existing&&!sources.has(m.to)){toast('Move blocked — collision');return;}
+  }
+  const pilots=moves.map(m=>({to:m.to,pilot:getPilot(m.from)}));
+  for(const m of moves)removePilot(m.from);
+  for(const p of pilots)setPilot(p.to,p.pilot);
+  _selected=new Set(moves.map(m=>m.to));
+  _dragMoved=true;
+  _suppressAnim=true;
+  render();
 }
 
 function attachSlotDropTarget(el,k){
@@ -161,6 +233,7 @@ function setPilot(k,d){
 }
 
 function dropOnSlot(srcK,dstK){
+  if(_drag&&_drag.multi){dropMultiOnSlot(_drag.multi,dstK);return;}
   const src=getPilot(srcK),dst=getPilot(dstK);
   if(!src)return;
   if(dst)setPilot(srcK,dst);else removePilot(srcK);
@@ -171,7 +244,23 @@ function dropOnSlot(srcK,dstK){
   render();
 }
 
+function multiKeys(multi){return [multi.leadKey,...multi.offsets.map(o=>o.key)];}
+
 function dropOnBench(srcK){
+  if(_drag&&_drag.multi){
+    for(const k of multiKeys(_drag.multi)){
+      if(isBench(k))continue;
+      const p=getPilot(k);
+      if(!p)continue;
+      removePilot(k);
+      cur().bench.push(p);
+    }
+    _selected.clear();
+    _dragMoved=true;
+    _suppressAnim=true;
+    render();
+    return;
+  }
   const src=getPilot(srcK);
   if(!src)return;
   if(isBench(srcK)){
@@ -188,6 +277,14 @@ function dropOnBench(srcK){
 }
 
 function dropOnTrash(srcK){
+  if(_drag&&_drag.multi){
+    for(const k of multiKeys(_drag.multi))removePilot(k);
+    _selected.clear();
+    _dragMoved=true;
+    _suppressAnim=true;
+    render();
+    return;
+  }
   removePilot(srcK);
   _dragMoved=true;
   _suppressAnim=true;
@@ -339,6 +436,7 @@ function render(){
   fw.classList.toggle('animate',!_suppressAnim);
   _suppressAnim=false;
   renderBench();
+  applySelectedVisual();
   autosave();
   if(lastEdit){
     const target=fw.querySelector(`.slot[data-key="${lastEdit}"]`);
@@ -513,6 +611,7 @@ document.querySelectorAll('.seg-btn').forEach(b=>{
   b.addEventListener('click',()=>{
     if(S.mode===b.dataset.mode)return;
     S.mode=b.dataset.mode;
+    clearSelection();
     document.querySelectorAll('.seg-btn').forEach(x=>{
       const on=x===b;
       x.classList.toggle('on',on);
@@ -521,7 +620,7 @@ document.querySelectorAll('.seg-btn').forEach(b=>{
     render();
   });
 });
-$('clr').addEventListener('click',()=>{cur().cells={};cur().bench=[];render();});
+$('clr').addEventListener('click',()=>{cur().cells={};cur().bench=[];clearSelection();render();});
 
 ['bench-zone','trash-zone'].forEach(id=>{
   const z=$(id),onTrash=id==='trash-zone';
@@ -714,10 +813,50 @@ $('btn-share').addEventListener('click',()=>{
 
 document.addEventListener('keydown',e=>{
   if(e.key!=='Escape')return;
+  let closedModal=false;
   ['modal-pilot','modal-export','modal-import','modal-saves'].forEach(id=>{
-    if($(id).style.display==='flex')hideModal(id);
+    if($(id).style.display==='flex'){hideModal(id);closedModal=true;}
   });
+  if(!closedModal)clearSelection();
 });
+
+function setupRubberBand(){
+  const fw=$('fw');
+  let rb=null;
+  fw.addEventListener('mousedown',e=>{
+    if(e.button!==0)return;
+    if(e.target.closest('.slot')||e.target.closest('button'))return;
+    rb={startX:e.clientX,startY:e.clientY,el:null,additive:e.shiftKey,baseline:e.shiftKey?new Set(_selected):null};
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove',e=>{
+    if(!rb)return;
+    const dx=Math.abs(e.clientX-rb.startX),dy=Math.abs(e.clientY-rb.startY);
+    if(!rb.el&&dx+dy<4)return;
+    if(!rb.el){
+      rb.el=document.createElement('div');
+      rb.el.className='rubber-band';
+      document.body.appendChild(rb.el);
+    }
+    const x1=Math.min(rb.startX,e.clientX),y1=Math.min(rb.startY,e.clientY);
+    const x2=Math.max(rb.startX,e.clientX),y2=Math.max(rb.startY,e.clientY);
+    Object.assign(rb.el.style,{position:'fixed',left:x1+'px',top:y1+'px',width:(x2-x1)+'px',height:(y2-y1)+'px'});
+    const next=rb.additive?new Set(rb.baseline):new Set();
+    document.querySelectorAll('.slot.filled[data-key]').forEach(slot=>{
+      const r=slot.getBoundingClientRect();
+      const cx=(r.left+r.right)/2,cy=(r.top+r.bottom)/2;
+      if(cx>=x1&&cx<=x2&&cy>=y1&&cy<=y2)next.add(slot.dataset.key);
+    });
+    _selected=next;
+    applySelectedVisual();
+  });
+  document.addEventListener('mouseup',()=>{
+    if(!rb)return;
+    if(rb.el){rb.el.remove();}else{clearSelection();}
+    rb=null;
+  });
+}
+setupRubberBand();
 
 document.querySelectorAll('.overlay').forEach(ov=>{
   ov.addEventListener('click',e=>{

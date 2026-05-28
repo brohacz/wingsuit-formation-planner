@@ -238,6 +238,19 @@ input[type=number]:focus-visible,input[type=text]:focus-visible,
   border-color:var(--color-border-primary);
   background:var(--color-accent-soft);
 }
+.slot.selected{
+  outline:2px solid var(--color-border-primary);
+  outline-offset:1px;
+  z-index:3;
+}
+
+.rubber-band{
+  border:1px dashed var(--color-border-primary);
+  background:var(--color-accent-soft);
+  pointer-events:none;
+  z-index:500;
+  box-shadow:0 0 0 1px rgba(0,0,0,.04);
+}
 .slot::after{
   content:"";
   position:absolute;
