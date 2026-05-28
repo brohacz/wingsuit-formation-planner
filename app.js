@@ -262,6 +262,7 @@ function render(){
   fw.classList.toggle('animate',!_suppressAnim);
   _suppressAnim=false;
   renderBench();
+  autosave();
   if(lastEdit){
     const target=fw.querySelector(`.slot[data-key="${lastEdit}"]`);
     if(target){
@@ -489,12 +490,23 @@ $('import-load').addEventListener('click',()=>{
 });
 
 const SAVES_KEY='wfp:saves';
+const AUTOSAVE_KEY='wfp:autosave';
 function getSaves(){
   try{return JSON.parse(localStorage.getItem(SAVES_KEY)||'{}');}
   catch(e){return {};}
 }
 function setSaves(o){
   try{localStorage.setItem(SAVES_KEY,JSON.stringify(o));return true;}
+  catch(e){return false;}
+}
+function autosave(){
+  try{localStorage.setItem(AUTOSAVE_KEY,toJSON());}
+  catch(e){}
+}
+function loadAutosave(){
+  const s=localStorage.getItem(AUTOSAVE_KEY);
+  if(!s)return false;
+  try{fromJSON(s);return true;}
   catch(e){return false;}
 }
 
@@ -620,4 +632,4 @@ document.querySelectorAll('.overlay').forEach(ov=>{
   });
 });
 
-if(!applyHashIfAny())render();
+if(!applyHashIfAny()&&!loadAutosave())render();

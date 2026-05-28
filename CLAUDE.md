@@ -73,10 +73,13 @@ Backward compat: legacy single-mode exports `{rows, cols, mode, cells, bench}` (
 
 ## Saving and sharing
 
-Two persistence paths beyond export/import JSON, both reusing `toJSON()` / `fromJSON()`:
+Three persistence paths beyond export/import JSON, all reusing `toJSON()` / `fromJSON()`:
 
-- **Named local saves** — `localStorage` under the single key `wfp:saves`, a map of `{<name>: <toJSON-string>}`. The Saved modal lets the user save the current formation under a name, then load or delete any entry. `getSaves` / `setSaves` are the only readers/writers; `renderSavesList()` rebuilds the modal contents. Saving with an existing name silently overwrites.
-- **Share-link URL hash** — `shareURL()` builds `<current-url>#f=<base64url-of-toJSON>` and copies it to the clipboard. On page load, `applyHashIfAny()` decodes the hash and feeds it to `fromJSON()`; if no hash (or invalid), the script falls through to `render()`. Base64 is URL-safe (`+/=` rewritten to `-_` with stripped padding) and Unicode-safe via `TextEncoder` / `TextDecoder`. No compression — typical exports fit in URL limits.
+- **Autosave** — `localStorage` under `wfp:autosave`, a single `toJSON()` string. `autosave()` is called at the end of every `render()`, so any state change (assign, drag, mode switch, clear, etc.) is captured. On page load, `loadAutosave()` restores it. The autosave is overwritten by any subsequent render, so it always reflects the last in-page state.
+- **Named local saves** — `localStorage` under `wfp:saves`, a map of `{<name>: <toJSON-string>}`. The Saved modal lets the user save the current formation under a name, then load or delete any entry. `getSaves` / `setSaves` are the only readers/writers; `renderSavesList()` rebuilds the modal contents. Saving with an existing name silently overwrites.
+- **Share-link URL hash** — `shareURL()` builds `<current-url>#f=<base64url-of-toJSON>` and copies it to the clipboard. `applyHashIfAny()` decodes the hash and feeds it to `fromJSON()`. Base64 is URL-safe (`+/=` rewritten to `-_` with stripped padding) and Unicode-safe via `TextEncoder` / `TextDecoder`. No compression — typical exports fit in URL limits.
+
+**Page-load order** (at the bottom of `app.js`): URL hash wins → autosave → default empty state. So a share link always loads the shared formation (even on returning users), and a regular reload picks up where the user left off.
 
 ## Conventions to preserve
 
