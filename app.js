@@ -93,7 +93,114 @@ function attachDragSource(el,k){
     document.querySelectorAll('.drag-over').forEach(s=>s.classList.remove('drag-over'));
     _drag=null;
   });
+  el.addEventListener('touchstart',e=>touchStart(el,k,e),{passive:true});
 }
+
+// Touch drag — HTML5 drag events don't fire on mobile browsers. Long-press
+// (200ms) lifts the pilot, a fixed-position ghost follows the finger, and
+// release hands off to the same reducers as the mouse path. A quick tap or
+// an early move (scroll) cancels the pending lift.
+const _touch={pending:null,active:false,ghost:null,overEl:null};
+
+function touchStart(el,k,e){
+  if(e.touches.length!==1){touchReset();return;}
+  const t=e.touches[0];
+  _touch.pending={el,k,x:t.clientX,y:t.clientY,timer:setTimeout(touchLift,200)};
+}
+
+function touchLift(){
+  const p=_touch.pending;
+  if(!p||!document.contains(p.el))return;
+  const r=p.el.getBoundingClientRect();
+  const g=p.el.cloneNode(true);
+  g.classList.add('touch-ghost');
+  g.classList.remove('selected','dragging');
+  g.style.cssText=`position:fixed;left:0;top:0;width:${r.width}px;height:${r.height}px;margin:0;`;
+  let multi=null;
+  if(_selected.has(p.k)&&_selected.size>1){
+    multi=computeMultiOffsets(p.k);
+    document.querySelectorAll('.slot.selected').forEach(s=>s.classList.add('dragging'));
+  } else {
+    p.el.classList.add('dragging');
+    if(!_selected.has(p.k))clearSelection();
+  }
+  _drag={src:p.k,multi:multi};
+  _dragMoved=false;
+  document.body.appendChild(g);
+  _touch.ghost=g;
+  _touch.active=true;
+  touchMoveGhost(p.x,p.y);
+  if(navigator.vibrate)navigator.vibrate(10);
+}
+
+function touchMoveGhost(x,y){
+  const g=_touch.ghost;
+  g.style.transform=`translate(${Math.round(x-g.offsetWidth/2)}px,${Math.round(y-g.offsetHeight/2-18)}px)`;
+}
+
+function touchTarget(x,y){
+  const el=document.elementFromPoint(x,y);
+  if(!el)return null;
+  const canvas=el.closest('.ff-canvas');
+  if(canvas&&canvas._snap){
+    const k=canvas._snap(x,y);
+    return {kind:'slot',k:k,el:canvas.querySelector(`.slot[data-key="${k}"]`)};
+  }
+  const slot=el.closest('.slot[data-key]');
+  if(slot)return {kind:'slot',k:slot.dataset.key,el:slot};
+  if(el.closest('#bench-zone'))return isBench(_drag.src)?null:{kind:'bench',el:$('bench-zone')};
+  if(el.closest('#trash-zone'))return {kind:'trash',el:$('trash-zone')};
+  return null;
+}
+
+function touchReset(){
+  if(_touch.pending)clearTimeout(_touch.pending.timer);
+  _touch.pending=null;
+  if(_touch.ghost)_touch.ghost.remove();
+  _touch.ghost=null;
+  if(_touch.overEl)_touch.overEl.classList.remove('drag-over');
+  _touch.overEl=null;
+  if(_touch.active){
+    document.querySelectorAll('.dragging').forEach(s=>s.classList.remove('dragging'));
+    _drag=null;
+    _touch.active=false;
+  }
+}
+
+document.addEventListener('touchmove',e=>{
+  const p=_touch.pending;
+  if(!p)return;
+  const t=e.touches[0];
+  if(!_touch.active){
+    if(Math.abs(t.clientX-p.x)+Math.abs(t.clientY-p.y)>8)touchReset();
+    return;
+  }
+  e.preventDefault();
+  touchMoveGhost(t.clientX,t.clientY);
+  if(_touch.overEl)_touch.overEl.classList.remove('drag-over');
+  _touch.overEl=null;
+  const tgt=touchTarget(t.clientX,t.clientY);
+  if(tgt&&tgt.el&&!(tgt.kind==='slot'&&tgt.k===_drag.src)){
+    tgt.el.classList.add('drag-over');
+    _touch.overEl=tgt.el;
+  }
+},{passive:false});
+
+document.addEventListener('touchend',e=>{
+  if(!_touch.pending)return;
+  if(!_touch.active){touchReset();return;}
+  e.preventDefault();
+  const t=e.changedTouches[0];
+  const tgt=touchTarget(t.clientX,t.clientY);
+  if(tgt){
+    if(tgt.kind==='slot'){if(tgt.k!==_drag.src)dropOnSlot(_drag.src,tgt.k);}
+    else if(tgt.kind==='bench')dropOnBench(_drag.src);
+    else dropOnTrash(_drag.src);
+  }
+  touchReset();
+},{passive:false});
+
+document.addEventListener('touchcancel',touchReset);
 
 function applySelectedVisual(){
   document.querySelectorAll('.slot[data-key]').forEach(el=>{
@@ -181,10 +288,11 @@ function attachSlotDropTarget(el,k){
 
 function attachFreeformSnap(canvas,ff,hsX,sY,cyOffset,hxMax){
   let lastK=null;
-  function snapKey(e){
+  canvas._snap=snapKey;
+  function snapKey(cx,cy){
     const rect=canvas.getBoundingClientRect();
-    const x=e.clientX-rect.left;
-    const y=e.clientY-rect.top;
+    const x=cx-rect.left;
+    const y=cy-rect.top;
     let hx=Math.round(x/hsX)-1;
     hx=Math.max(0,Math.min(hxMax-1,hx));
     let r=Math.round((y-cyOffset)/sY);
@@ -201,7 +309,7 @@ function attachFreeformSnap(canvas,ff,hsX,sY,cyOffset,hxMax){
     if(!_drag)return;
     e.preventDefault();
     e.dataTransfer.dropEffect='move';
-    const k=snapKey(e);
+    const k=snapKey(e.clientX,e.clientY);
     if(_drag.src===k){clearHighlight();return;}
     if(k===lastK)return;
     clearHighlight();
@@ -216,7 +324,7 @@ function attachFreeformSnap(canvas,ff,hsX,sY,cyOffset,hxMax){
   canvas.addEventListener('drop',e=>{
     e.preventDefault();
     if(!_drag){clearHighlight();return;}
-    const k=snapKey(e);
+    const k=snapKey(e.clientX,e.clientY);
     clearHighlight();
     if(_drag.src===k)return;
     dropOnSlot(_drag.src,k);

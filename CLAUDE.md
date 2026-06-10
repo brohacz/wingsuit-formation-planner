@@ -70,6 +70,10 @@ Pilots can be dragged between any two slots (swap or move), from a slot to the b
 - The drop reducers are `dropOnSlot`, `dropOnBench`, `dropOnTrash`. They mutate the current mode via `cur()` then call `render()`. Each one branches early to a multi-drag variant when `_drag.multi` is set.
 - After a drop, `_dragMoved` is set so the source's `click` handler skips opening the edit modal once.
 
+### Touch
+
+HTML5 drag events don't fire on mobile browsers, so `attachDragSource` also wires `touchstart` into a parallel touch layer (module state `_touch`). A 200 ms long-press lifts the pilot (`touchLift`): it sets the same `_drag = {src, multi}` the mouse path uses (including multi-drag capture from `_selected`), clones the slot into a `position:fixed` `.touch-ghost` that follows the finger, and from then on `touchmove` is `preventDefault`ed so the page doesn't scroll. Moving more than ~8 px before the timer fires cancels the lift, so a normal scroll that starts on a slot still scrolls. Drop targets are hit-tested with `document.elementFromPoint` (`touchTarget`): a `.ff-canvas` ancestor reuses the snap function the canvas exposes as `canvas._snap`, otherwise the nearest `.slot[data-key]`, bench zone, or trash zone wins, and `touchend` hands off to the same `dropOnSlot` / `dropOnBench` / `dropOnTrash` reducers. `touchend` while a drag is active is `preventDefault`ed so no synthetic click follows; a quick tap never activates the layer and falls through to the native click (edit modal). `touchcancel` and multi-finger touches reset via `touchReset`.
+
 ## Selection and multi-move
 
 `_selected = new Set<key>` holds the currently selected slot keys (per-mode; mode switching clears it). Three ways to populate it:

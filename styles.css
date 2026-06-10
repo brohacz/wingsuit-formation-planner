@@ -251,6 +251,20 @@ input[type=number]:focus-visible,input[type=text]:focus-visible,
   z-index:500;
   box-shadow:0 0 0 1px rgba(0,0,0,.04);
 }
+
+.slot,.bench-item{
+  -webkit-touch-callout:none;
+  -webkit-user-select:none;
+  user-select:none;
+  touch-action:manipulation;
+}
+.touch-ghost{
+  pointer-events:none;
+  z-index:600;
+  opacity:.9;
+  transition:none;
+  box-shadow:0 8px 24px rgba(0,0,0,.18);
+}
 .slot::after{
   content:"";
   position:absolute;
