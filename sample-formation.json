@@ -109,103 +109,103 @@
     {
       "name": "Point 2",
       "cells": {
-        "0,8": {
-          "name": "Piotrek W.",
-          "color": "#1d9e75"
-        },
-        "1,7": {
-          "name": "Tomek N.",
-          "color": "#1d9e75"
-        },
-        "1,9": {
-          "name": "Reto",
-          "color": "#1d9e75"
-        },
-        "2,6": {
-          "name": "Messicano",
-          "color": "#1d9e75"
-        },
-        "2,8": {
-          "name": "Flo",
-          "color": "#1d9e75"
-        },
-        "2,10": {
-          "name": "Wiktor",
-          "color": "#1d9e75"
-        },
-        "3,5": {
-          "name": "Giuseppe",
-          "color": "#1d9e75"
-        },
-        "3,7": {
-          "name": "Nemish",
-          "color": "#1d9e75"
-        },
-        "3,9": {
-          "name": "Ritvars",
-          "color": "#1d9e75"
-        },
-        "3,11": {
-          "name": "Serhii",
-          "color": "#1d9e75"
-        },
-        "4,4": {
+        "4,3": {
           "name": "Piergiorgio",
           "color": "#1d9e75"
         },
-        "4,6": {
+        "0,7": {
+          "name": "Piotrek W.",
+          "color": "#1d9e75"
+        },
+        "1,6": {
+          "name": "Tomek N.",
+          "color": "#1d9e75"
+        },
+        "1,8": {
+          "name": "Reto",
+          "color": "#1d9e75"
+        },
+        "2,5": {
+          "name": "Messicano",
+          "color": "#1d9e75"
+        },
+        "2,7": {
+          "name": "Flo",
+          "color": "#1d9e75"
+        },
+        "2,9": {
+          "name": "Wiktor",
+          "color": "#1d9e75"
+        },
+        "3,4": {
+          "name": "Giuseppe",
+          "color": "#1d9e75"
+        },
+        "3,6": {
+          "name": "Nemish",
+          "color": "#1d9e75"
+        },
+        "3,8": {
+          "name": "Ritvars",
+          "color": "#1d9e75"
+        },
+        "3,10": {
+          "name": "Serhii",
+          "color": "#1d9e75"
+        },
+        "4,5": {
           "name": "Massimo",
           "color": "#1d9e75"
         },
-        "4,8": {
+        "4,7": {
           "name": "Stefan Ka.",
           "color": "#1d9e75"
         },
-        "4,10": {
+        "4,9": {
           "name": "Urzi",
           "color": "#1d9e75"
         },
-        "4,12": {
+        "4,11": {
           "name": "Zibi",
           "color": "#1d9e75"
         },
-        "5,5": {
+        "5,4": {
           "name": "Alexandra",
           "color": "#1d9e75"
         },
-        "5,7": {
+        "5,6": {
           "name": "Tobi",
           "color": "#1d9e75"
         },
-        "5,9": {
+        "5,8": {
           "name": "Julia",
           "color": "#971d9f"
         },
-        "5,11": {
+        "5,10": {
           "name": "Stefan G.",
           "color": "#1d9e75"
         },
-        "6,6": {
+        "6,5": {
           "name": "Edd",
           "color": "#9f1d1d"
         },
-        "6,8": {
+        "6,7": {
           "name": "Kuba J.",
           "color": "#9f1d1d"
         },
-        "6,10": {
+        "6,9": {
           "name": "Roman",
           "color": "#9f1d1d"
         },
-        "7,7": {
+        "7,6": {
           "name": "Kuba M.",
           "color": "#9f1d1d"
         },
-        "7,9": {
+        "7,8": {
           "name": "Pauline",
           "color": "#9f1d1d"
         },
-        "8,8": {
+        "8,7": {
           "name": "Brosig",
           "color": "#1d9e75"
         }
@@ -213,6 +213,6 @@
       "bench": []
     }
   ],
-  "cur": 0,
+  "cur": 1,
   "autofit": false
 }
