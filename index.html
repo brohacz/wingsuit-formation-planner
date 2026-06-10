@@ -17,27 +17,13 @@
 <header class="page-header">
   <p class="kicker">Wingsuit Formation Chart · v0.1</p>
   <h1>Wingsuit formation planner</h1>
-  <p class="lede">Pick a layout, assign pilots and suit colors, then export the formation as JSON to save or share with your group.</p>
+  <p class="lede">Place pilots on the half-step grid, plan the points of your dive, then export or share the plan with your group.</p>
 </header>
 <div class="planner">
   <div class="topbar">
     <div class="ctrl">
-      <label id="rows-label">Rows</label>
-      <input type="number" id="rows" min="1" max="12" value="3">
-    </div>
-    <div class="sep" id="cols-sep"></div>
-    <div class="ctrl" id="cols-ctrl">
-      <label>Cols</label>
-      <input type="number" id="cols" min="1" max="12" value="3">
-    </div>
-    <div class="sep"></div>
-    <div class="ctrl">
-      <label>Shape</label>
-      <div class="seg" role="tablist" aria-label="Formation shape">
-        <button class="seg-btn on" data-mode="regular" role="tab" aria-selected="true">Regular</button>
-        <button class="seg-btn" data-mode="diamond" role="tab" aria-selected="false">Diamond</button>
-        <button class="seg-btn" data-mode="freeform" role="tab" aria-selected="false">Freeform</button>
-      </div>
+      <input type="checkbox" id="af-chk">
+      <label for="af-chk">Autofit</label>
     </div>
     <div class="action-group">
       <button class="ico-btn" id="btn-roster" aria-label="Pilot roster">
@@ -67,7 +53,6 @@
     </div>
   </div>
   <div class="points-bar" id="points-bar" role="tablist" aria-label="Formation points"></div>
-  <div class="readout" id="readout" aria-live="polite"></div>
   <div class="fw" id="fw"></div>
   <div class="bench-bar">
     <div class="bench-zone" id="bench-zone" aria-label="Bench — drop pilots here to rest">
@@ -118,7 +103,7 @@
   <div class="mcard wide">
     <h3 id="mi-title">Import formation</h3>
     <label>Paste exported JSON to restore a formation</label>
-    <textarea class="json-area" id="import-area" placeholder='{"rows":3,"cols":3,"mode":"regular","cells":{"0,0":{"name":"Anna","color":"#1d9e75"}}}'></textarea>
+    <textarea class="json-area" id="import-area" placeholder='{"points":[{"name":"Point 1","rows":5,"cols":5,"cells":{"0,0":{"name":"Anna","color":"#1d9e75"}},"bench":[]}],"cur":0}'></textarea>
     <div class="err-msg" id="import-err"></div>
     <div class="mbtns">
       <button class="bprimary" id="import-sample">Load sample</button>

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Purpose
 
-A browser-based planner for **wingsuit flying formations** — coordinated shapes flown by multiple wingsuit pilots. The user picks a layout (regular rows×columns grid, or a diamond that swells to a middle row and tapers back), clicks a slot to assign a pilot name and pick their suit color, and gets a visual map of who flies where. Each filled slot shows a small SVG wingsuit silhouette in the pilot's color with their name. A plan can hold multiple **points** — the sequence of formations flown on one dive — stepped through with a chip bar. Formations can be exported to JSON and re-imported, so a plan can be saved, shared with the group, or loaded back later.
+A browser-based planner for **wingsuit flying formations** — coordinated shapes flown by multiple wingsuit pilots. The user places pilots on a freeform half-step grid (every row exposes both square-aligned and diamond-aligned positions), clicks a slot to assign a pilot name and pick their suit color, and gets a visual map of who flies where. Each filled slot shows a small SVG wingsuit silhouette in the pilot's color with their name. A plan can hold multiple **points** — the sequence of formations flown on one dive — stepped through with a chip bar. Formations can be exported to JSON and re-imported, so a plan can be saved, shared with the group, or loaded back later.
 
 ## Project shape
 
@@ -24,53 +24,51 @@ The page is designed to be embedded in (or styled by) a host that provides these
 
 ## State and rendering
 
-A dive plan is an ordered list of **points** held in `PTS` (current index `PI`). The module-scoped `S` is always the **active point** (`S === PTS[PI]`) — every function below operates on `S`, so switching points just swaps `S` wholesale (`switchPoint`) and re-renders. Each point owns a name plus all three formation modes **separately** — dimensions, cells, and bench — so editing one mode doesn't disturb the others:
+A dive plan is an ordered list of **points** held in `PTS` (current index `PI`). The module-scoped `S` is always the **active point** (`S === PTS[PI]`) — every function below operates on `S`, so switching points just swaps `S` wholesale (`switchPoint`) and re-renders. Each point is one flat freeform formation:
 
 ```js
-S = PTS[PI] = {
-  name,                                                      // point name, e.g. "Exit wave"
-  mode,                                                      // which mode is active in this point
-  regular:  { rows, cols, cells: {}, bench: [] },            // grid: rows × cols
-  diamond:  { rows,        cells: {}, bench: [] },           // diamond: rows = widest (no cols)
-  freeform: { rows, cols, cells: {}, bench: [] }             // freeform: half-step horizontal grid
-}
+S = PTS[PI] = { name, rows, cols, cells: {}, bench: [] }
 ```
 
-The list of mode names is `MODES = ['regular','diamond','freeform']` (`app.js:1`). The `rows`/`cols` inputs in the topbar read and write `cur().rows` / `cur().cols`; switching modes restores each mode's own dimensions. The cols input is hidden only in diamond mode (freeform uses both).
+There is no manual canvas size. `fitGrid(pt)` (called at the top of every `render()` for the active point and by `parsePoint` on import) derives `rows`/`cols`, with two behaviors switched by the **Autofit** checkbox (`#af-chk`, module flag `AF`, persisted in the plan JSON as `autofit`, default **off**):
+
+- **Autofit off (default)**: a static **9×9** grid. It never shifts or shrinks; it only expands when pilots sit beyond it (out-of-bounds imports, toggling autofit off on a large formation).
+- **Autofit on**: the grid hugs the cells' bounding box with **exactly one empty row above and below, and one empty column (two half-steps) left and right**; an empty plan defaults to 5×5. Dropping a pilot onto that outer ring grows the canvas on the next render; tightening the formation shrinks it. The refit shifts cell keys via `shiftCells` (`dr = 1 - rmin`, `dhx = 2 - hmin`) so the formation stays compact and centered; `render()` remaps `_selected` and `lastEdit` by the returned shift, which means **cell keys are not stable across renders in autofit mode** — never cache them across a mutation.
+
+`rows`/`cols` are runtime-derived and not persisted. There is no shape picker and no readout bar — the half-step grid is the only layout.
 
 ### Points
 
-The points bar (`#points-bar`, rebuilt by `renderPoints()` inside `render()`) shows one chip per point plus actions for the active one: **+ Point** (`addPoint` — deep-clones the current point via `JSON.parse(JSON.stringify(...))` and inserts it after, so the next point starts as "same crew, same shape, now edit"), rename (`renamePoint`, a `prompt()`), reorder (`movePoint(±1)`, swaps and follows), and delete (`delPoint`, `confirm()`-guarded, disabled when only one point remains). Switching points clears `_selected` and re-syncs the mode segmented control via `syncModeButtons()` since each point remembers its own active mode. The readout shows the active point's name when the plan has more than one point.
+The points bar (`#points-bar`, rebuilt by `renderPoints()` inside `render()`) shows one chip per point plus actions for the active one: **+ Point** (`addPoint` — deep-clones the current point via `JSON.parse(JSON.stringify(...))` and inserts it after, so the next point starts as "same crew, same shape, now edit"), rename (`renamePoint`, a `prompt()`), reorder (`movePoint(±1)`, swaps and follows), and delete (`delPoint`, `confirm()`-guarded, disabled when only one point remains). Switching points clears `_selected`.
 
-### Freeform mode
+### The half-step grid
 
-Freeform exists so a single formation can mix square-aligned and diamond-aligned pilots. The canvas has `(2*cols - 1) * rows` snap positions — every row exposes both the integer half-step columns (square-aligned) and the offset half-step columns (diamond-aligned), and the user can place a pilot at any of them. Cell keys are `"r,hx"` where `hx` is the half-column index (0..2*cols-2).
+The canvas has `(2*cols - 1) * rows` snap positions — every row exposes both the integer half-step columns (square-aligned) and the offset half-step columns (diamond-aligned), so one formation can mix both alignments. Cell keys are `"r,hx"` where `hx` is the half-column index (0..2*cols-2).
 
-All filled slots in every mode render at 70×80 (the wingsuit silhouette is 40 px, name plate font 10 px). In freeform the half-step horizontal spacing is `cW/2 = 35`, so a pilot placed in a "diamond" half-position one row below two square neighbors visually overlaps with both of them — mimicking how the lower-row pilot tucks between the wings of the upper pair when viewed from above. Empty freeform positions render as 30×30 hit areas centered on the half-position and get a higher `z-index` (via `.ff-canvas .slot:not(.filled){z-index:2}`) so they stay clickable even where neighboring filled slots cover their center. The `compact` flag on `makeSlot` is set only for empty freeform slots and switches off the dashed border/background until hover.
+Filled slots render at 70×80 (the wingsuit silhouette is 40 px, name plate font 10 px). The half-step horizontal spacing is `cW/2 = 35`, so a pilot placed in a "diamond" half-position one row below two square neighbors visually overlaps with both of them — mimicking how the lower-row pilot tucks between the wings of the upper pair when viewed from above. Empty positions render as 30×30 hit areas centered on the half-position and get a higher `z-index` (via `.ff-canvas .slot:not(.filled){z-index:2}`) so they stay clickable even where neighboring filled slots cover their center. The `compact` flag on `makeSlot` is set only for empty slots and switches off the dashed border/background until hover.
 
-Drag-and-drop in freeform doesn't use per-slot drop targets. Each slot is rendered with `noDropTarget=true`, and `attachFreeformSnap(canvas, ff, hsX, sY, cyOffset, hxMax)` wires `dragover` / `dragleave` / `drop` on the canvas itself. It converts the pointer's `clientX/Y` to the nearest snap key with `Math.round(x/hsX) - 1` (horizontal) and `Math.round((y - cyOffset)/sY)` (vertical), highlights that slot's `.drag-over` class on hover, and on drop hands off to the existing `dropOnSlot(src, k)`. Net effect: drop anywhere in the canvas and the pilot snaps to the closest center — whether that snap point was empty (move) or filled (swap).
+Drag-and-drop doesn't use per-slot drop targets. `attachFreeformSnap(canvas, ff, hsX, sY, cyOffset, hxMax)` wires `dragover` / `dragleave` / `drop` on the canvas itself. It converts the pointer's `clientX/Y` to the nearest snap key with `Math.round(x/hsX) - 1` (horizontal) and `Math.round((y - cyOffset)/sY)` (vertical), highlights that slot's `.drag-over` class on hover, and on drop hands off to `dropOnSlot(src, k)`. Net effect: drop anywhere in the canvas and the pilot snaps to the closest center — whether that snap point was empty (move) or filled (swap).
 
-- `cur()` returns the active point's active mode `{rows, cols?, cells, bench}`. **Never read `S.cells` / `S.bench` directly — always go through `cur()`.** Plan-wide operations (roster, propagation) iterate `for(const pt of PTS) for(const mn of MODES) pt[mn]`.
-- `cells` is keyed by `"r,c"` strings produced by `key(r, c)` (`app.js:21`). `bench` is a flat array of `{name, color}` objects for pilots who are resting off the formation.
-- Anything that holds a pilot is addressed by a string key. Grid keys are `"r,c"`; bench keys are `"b:<index>"` produced by `bkey(i)` (`app.js:10`). Use the source-agnostic helpers `getPilot(k)`, `setPilot(k, d)`, `removePilot(k)` (`app.js:12`, `app.js:110`, `app.js:106`) — they read/write `cur()` and let drag-and-drop, the edit modal, and trash work uniformly.
-- `mode` is `"regular"` or `"diamond"`. In diamond mode the `cols` control is hidden and row widths are computed by `rowCount(total, r)` (`app.js:181`), which produces a symmetric 1, 2, …, mid+1, …, 2, 1 pattern. The diamond is laid out absolutely inside a sized wrapper so rows stay centered; the regular mode uses CSS grid. In diamond, `rows` means "widest" — the single integer that determines both the widest row and (implicitly via `2*rows-1`) the total row count.
-- `render()` (`app.js:213`) is the single source of truth for the DOM — every mutation calls it. There is no virtual DOM or diffing; the slot grid and bench are rebuilt on each render. `render()` calls `renderBench()` (`app.js:166`) at the end.
-- `makeSlot()` (`app.js:44`) returns a `.slot` element and inlines the `ws()` SVG (`app.js:24`) for the wingsuit silhouette. Color comes from the cell, size from a parameter.
+- `cur()` returns the active point (it is just `S`); it exists so the helpers below read naturally and call sites don't care which point is active. Plan-wide operations (roster, identity propagation) iterate `for(const pt of PTS)`.
+- `cells` is keyed by `"r,hx"` strings produced by `key(r, c)`. `bench` is a flat array of `{name, color}` objects for pilots who are resting off the formation.
+- Anything that holds a pilot is addressed by a string key. Grid keys are `"r,hx"`; bench keys are `"b:<index>"` produced by `bkey(i)`. Use the source-agnostic helpers `getPilot(k)`, `setPilot(k, d)`, `removePilot(k)` — they read/write `cur()` and let drag-and-drop, the edit modal, and trash work uniformly.
+- `render()` is the single source of truth for the DOM — every mutation calls it. There is no virtual DOM or diffing; the canvas, points bar, and bench are rebuilt on each render (`renderPoints()`, `renderBench()`).
+- `makeSlot()` returns a `.slot` element and inlines the `ws()` SVG for the wingsuit silhouette. Color comes from the cell, size from a parameter.
 
-## Cross-mode propagation
+## Global pilot identity
 
-Modes (and points) are otherwise isolated, with one exception: when a pilot is **created** (an empty slot is filled via the edit modal), they are also copied to the bench of every other mode **of every point** so the same roster is available in all shapes and all points. The propagation rules:
+A pilot's **identity** (name + suit color) is plan-wide; only their **position** is per-point. Saving the pilot modal — from a slot, a bench item, or the roster — rewrites every occurrence of that pilot across all points via `rosterApply`, so name/color can never diverge between points. The rules, all living in the `msav` handler and roster helpers:
 
-- Trigger: `msav` handler, slot was empty (`getPilot(ekey)` returned undefined), name is non-empty, target is a slot (not the bench).
-- For each `pt[mn]` over `PTS × MODES` except `cur()` itself: skipped if a pilot with the same case-insensitive trimmed name already exists in that mode (in either cells or bench) — see `pilotInMode(name, m)`.
-- Edits, drags, removes, and trash drops do *not* propagate. Mode-isolated state means each mode owns its own positions and color choices.
-- The "Clear" button clears only the current mode of the current point.
+- Editing an existing pilot (rename and/or recolor) applies to every cell and bench entry in every point. Renaming onto a name that already belongs to a *different* roster pilot is rejected with a toast (case-insensitive; re-casing a pilot's own name is allowed).
+- Filling an empty slot with a name that already exists in the roster places that pilot there **and** re-unifies their color everywhere to the one just picked.
+- Creating a genuinely new pilot also copies them to every *other* point's bench (deduped via `pilotInPoint(name, pt)`) so the crew is available throughout the plan.
+- Drags, removes, and trash drops stay point-local — they move or clear positions, not identities. The "Clear" button clears only the current point.
 
 ## Pilot roster
 
-The Roster button opens `modal-roster`, the one place where a pilot can be edited *across* all modes and points (per-slot edits stay mode-isolated; the roster exists to re-unify names/colors when they diverge). There is no separate roster data structure — `rosterList()` derives the roster from the whole plan on every open: the union of distinct pilots (case-insensitive trimmed name, first-seen color wins) over every point's modes' `cells` and `bench`, each with a list of location strings (`MODE_TAG[mode] + coordLabel(r, c, mode)` or `"<tag> bench"`, prefixed with `P<n>` when the plan has more than one point).
+The Roster button opens `modal-roster`, listing the whole plan's crew. There is no separate roster data structure — `rosterList()` derives it on every open: the union of distinct pilots (case-insensitive trimmed name, first-seen color wins) over every point's `cells` and `bench`, each with location strings (`coordLabel(r, hx)` or `"bench"`, prefixed with `P<n>` when the plan has more than one point).
 
-Row actions and the Add button reuse `modal-pilot` instead of duplicating the name/swatch UI. The module flag `rkey` switches the modal's semantics: `null` is the normal per-slot flow keyed by `ekey`; `{old: name}` means "edit this pilot everywhere" (save → `rosterApply` rewrites every matching cell/bench entry in all points and modes; Remove → `rosterRemove` deletes them all); `{add: true}` means "new roster pilot" (save → pushed onto **every** point's **every** mode's bench). Saving with a name that already belongs to a different roster pilot is rejected with a toast (case-insensitive; renaming a pilot to a different casing of itself is allowed). Closing `modal-pilot` always clears `rkey` (in `hideModal`), and `openModal` resets it plus the modal title, so a roster edit can never leak into the next slot edit. Save/Cancel/Remove in roster context return to the reopened roster modal.
+Row actions and the Add button reuse `modal-pilot` instead of duplicating the name/swatch UI. The module flag `rkey` switches the modal's semantics: `null` is the normal per-slot flow keyed by `ekey`; `{old: name}` means "edit this pilot everywhere" (Remove → `rosterRemove` deletes every occurrence); `{add: true}` means "new roster pilot" (save → pushed onto **every** point's bench). The same duplicate-name toast applies. Closing `modal-pilot` always clears `rkey` (in `hideModal`), and `openModal` resets it plus the modal title, so a roster edit can never leak into the next slot edit. Save/Cancel/Remove in roster context return to the reopened roster modal.
 
 ## Drag-and-drop
 
@@ -83,11 +81,11 @@ Pilots can be dragged between any two slots (swap or move), from a slot to the b
 
 ### Touch
 
-HTML5 drag events don't fire on mobile browsers, so `attachDragSource` also wires `touchstart` into a parallel touch layer (module state `_touch`). A 200 ms long-press lifts the pilot (`touchLift`): it sets the same `_drag = {src, multi}` the mouse path uses (including multi-drag capture from `_selected`), clones the slot into a `position:fixed` `.touch-ghost` that follows the finger, and from then on `touchmove` is `preventDefault`ed so the page doesn't scroll. Moving more than ~8 px before the timer fires cancels the lift, so a normal scroll that starts on a slot still scrolls. Drop targets are hit-tested with `document.elementFromPoint` (`touchTarget`): a `.ff-canvas` ancestor reuses the snap function the canvas exposes as `canvas._snap`, otherwise the nearest `.slot[data-key]`, bench zone, or trash zone wins, and `touchend` hands off to the same `dropOnSlot` / `dropOnBench` / `dropOnTrash` reducers. `touchend` while a drag is active is `preventDefault`ed so no synthetic click follows; a quick tap never activates the layer and falls through to the native click (edit modal). `touchcancel` and multi-finger touches reset via `touchReset`.
+HTML5 drag events don't fire on mobile browsers, so `attachDragSource` also wires `touchstart` into a parallel touch layer (module state `_touch`). A 200 ms long-press lifts the pilot (`touchLift`): it sets the same `_drag = {src, multi}` the mouse path uses (including multi-drag capture from `_selected`), clones the slot into a `position:fixed` `.touch-ghost` that follows the finger, and from then on `touchmove` is `preventDefault`ed so the page doesn't scroll. Moving more than ~8 px before the timer fires cancels the lift, so a normal scroll that starts on a slot still scrolls. Drop targets are hit-tested with `document.elementFromPoint` (`touchTarget`): a `.ff-canvas` ancestor reuses the snap function the canvas exposes as `canvas._snap`, otherwise the nearest `.slot[data-key]`, bench zone, or trash zone wins, and `touchend` hands off to the same `dropOnSlot` / `dropOnBench` / `dropOnTrash` reducers. `touchend` while a drag is active is `preventDefault`ed so no synthetic click follows; a quick tap never activates the layer and falls through to the native click (edit modal). `touchcancel` and multi-finger touches reset via `touchReset`. Because native scrolling is suppressed mid-drag, `touchAutoScroll` scrolls the page while the finger holds near the top/bottom viewport edge so off-screen targets (e.g. the bench below a tall canvas) stay reachable.
 
 ## Selection and multi-move
 
-`_selected = new Set<key>` holds the currently selected slot keys (per-mode; mode switching clears it). Three ways to populate it:
+`_selected = new Set<key>` holds the currently selected slot keys (per-point; point switching clears it). Three ways to populate it:
 
 - **Rubber-band**: `setupRubberBand()` listens on `#fw` for `mousedown` (left button, not on any `.slot` or `button`). It creates a `position:fixed` `.rubber-band` div on the document body once movement crosses 4 px, then on every `mousemove` re-computes which filled-slot bounding-rect centers fall inside the rectangle (`getBoundingClientRect`). Shift+rubber-band is additive (the prior `_selected` is treated as the baseline).
 - **Cmd/Ctrl+click** on a filled slot: `toggleSelect(k)`.
@@ -97,26 +95,22 @@ Selection visual: `.slot.selected` adds an outline and bumps `z-index` so the se
 
 **Multi-drag**: in `attachDragSource`'s `dragstart`, if the dragged key is in `_selected` and there's more than one selected, it captures `multi = computeMultiOffsets(leadKey)` — a list of `{key, dr, dc}` offsets from the lead. On drop:
 
-- `dropOnSlot` → `dropMultiOnSlot` computes each pilot's target as `(dropR + dr, dropC + dc)` and validates: every target must be in-bounds for the active mode (`isValidSlot` knows the regular/diamond/freeform shape), no two targets can collide, and no target may land on a non-selected occupied slot. Any failure rejects the move with a toast; on success, sources are cleared first then targets are written, and `_selected` is rewritten to the new keys.
+- `dropOnSlot` → `dropMultiOnSlot` computes each pilot's target as `(dropR + dr, dropC + dc)` and validates: every target must be in-bounds (`isValidSlot` checks the half-step grid), no two targets can collide, and no target may land on a non-selected occupied slot. Any failure rejects the move with a toast; on success, sources are cleared first then targets are written, and `_selected` is rewritten to the new keys.
 - `dropOnBench` / `dropOnTrash` apply to all selected slots at once (bench: move each to the bench, dedupe by source; trash: remove each).
 
 Dragging an unselected pilot clears the selection first (single-drag from then on). Dragging a selected pilot tags every other `.selected` slot with `.dragging` so they dim together until drop.
 
 ## Import / export
 
-`toJSON()` and `fromJSON()` define the persisted shape — a plan with one entry per point plus the active index:
+`toJSON()` and `fromJSON()` define the persisted shape — a plan with one flat entry per point plus the active index:
 
 ```json
-{"points":[{"name":"Point 1","mode":"regular","regular":{"rows":5,"cols":5,"cells":{...},"bench":[...]},"diamond":{"rows":3,"cells":{...},"bench":[...]},"freeform":{"rows":5,"cols":5,"cells":{...},"bench":[...]}}, ...],"cur":0}
+{"points":[{"name":"Point 1","cells":{"1,2":{"name":"Anna","color":"#1d9e75"}},"bench":[...]}, ...],"cur":0,"autofit":false}
 ```
 
-Each entry in `points` is sanitized by `parsePoint(d, defName)`: `mode` is coerced to one of `MODES`, `name` falls back to `"Point <n>"` and is trimmed to 24 chars, and each mode's dimensions and `cells`/`bench` go through `normalizeMode(m, fallbackDims, withCols)` — `rows` (and `cols` if `withCols`) clamped to 1–12 by `clampDim`, with `fallbackDims` covering a missing per-mode field. Bench entries without string `name` *and* `color` are dropped. `cur` is clamped to the points range. **Imported JSON is the trust boundary**, so keep validation there if extending the schema.
+Each entry in `points` is sanitized by `parsePoint(d, defName)`: `name` falls back to `"Point <n>"` and is trimmed to 24 chars, `cells`/`bench` go through `normalizeForm` (cell keys must be `r,hx` integer pairs within sane bounds and values must carry string `name`+`color`; bench entries without string `name` *and* `color` are dropped), and `fitGrid` derives the dimensions — old exports carrying `rows`/`cols` simply have them ignored. `cur` is clamped to the points range. **Imported JSON is the trust boundary**, so keep validation there if extending the schema.
 
-Backward compat handles older formats via the same path (`parsePoint` accepts every historical single-formation shape, and `fromJSON` wraps a non-`points` document as a one-point plan):
-1. Pre-per-mode-state legacy: top-level `{rows, cols, mode, cells, bench}`. The active mode gets the legacy data with its dimensions; the other modes get sensible defaults and every distinct pilot from the legacy data lands on each of their benches (deduped via `pilotInMode`).
-2. Per-mode-state without per-mode dimensions: each mode inherits the top-level `rows`/`cols` via `fallbackDims`, then takes over its own dimensions on next save.
-3. Per-mode-state without `freeform`: freeform initializes to an empty `{rows:5, cols:5, cells:{}, bench:[]}` on first load and starts being persisted on next save.
-4. Single-point (pre-`points`) format: top-level `{mode, regular, diamond, freeform}` becomes a one-point plan named "Point 1".
+Backward compat: a document (or point entry) carrying a `mode` string is a retired multi-mode/legacy format and goes through `migratePoint(d, name)`, which maps the old shapes onto the half-step grid — regular `(r,c)` → `(r, 2c)`; a diamond of widest `w` centers row `r` (width `cnt`) at `hx=(w-1)-(cnt-1)+2c`; a freeform sub-state carries over verbatim. The point's saved active mode decides which layout's positions survive (when it actually has pilots placed; otherwise freeform's), and every pilot from the other modes' cells and benches lands on the bench (deduped via `pilotInPoint`) so nobody is lost. `fromJSON` wraps any non-`points` document as a one-point plan, which also covers the oldest top-level `{rows, cols, mode, cells, bench}` format.
 
 ## Saving and sharing
 
@@ -134,5 +128,6 @@ Three persistence paths beyond export/import JSON, all reusing `toJSON()` / `fro
 - Keep identifiers short (the existing code uses `S`, `ws`, `ekey`, `cnt`, `sx`, `rW`, `cur`, etc.). Don't "modernize" them piecemeal.
 - After any state mutation, call `render()` rather than patching the DOM in place.
 - Address pilots through the `getPilot` / `setPilot` / `removePilot` helpers when the source could be either a slot or the bench. Only the helpers know the `"b:N"` vs `"r,c"` distinction.
-- Always read mode-scoped state through `cur()`; for plan-wide work iterate `PTS × MODES`. Reaching into a specific mode of a specific point (`pt[mn]`) is fine when that's genuinely what you need, but avoid hard-coding `'regular'` / `'diamond'` strings in business logic — let `cur()` flip with `S.mode`.
-- `S` must always be `PTS[PI]` — never let them diverge. Anything that replaces the points array or index (point switch/delete, `fromJSON`) must reassign `S`, call `syncModeButtons()`, clear the selection, and `render()`.
+- Read the active point through `cur()`; for plan-wide work iterate `for(const pt of PTS)`.
+- `S` must always be `PTS[PI]` — never let them diverge. Anything that replaces the points array or index (point switch/delete, `fromJSON`) must reassign `S`, clear the selection, and `render()`.
+- Pilot identity (name + color) is global: any code path that changes a pilot's name or color must go through `rosterApply` (and the duplicate-name check) so every point stays in sync. Positions stay point-local.

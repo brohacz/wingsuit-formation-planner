@@ -1,39 +1,25 @@
-const MODES=['regular','diamond','freeform'];
-// S is the ACTIVE point of the dive plan. PTS holds every point (S===PTS[PI]);
+// Each point of the dive plan is one freeform formation:
+// {name, rows, cols, cells, bench}. S is the ACTIVE point (S===PTS[PI]);
 // switching points swaps S wholesale, so cur()/render() and everything below
 // keep working on whichever point is active.
-let S={
-  name:'Point 1',
-  mode:'regular',
-  regular:{rows:3,cols:3,cells:{},bench:[]},
-  diamond:{rows:3,cells:{},bench:[]},
-  freeform:{rows:5,cols:5,cells:{},bench:[]}
-};
+let S={name:'Point 1',rows:5,cols:5,cells:{},bench:[]};
 let PTS=[S],PI=0;
+let AF=false; // autofit toggle; off = static 9x9 grid
 const PALETTE=['#1a1d22','#94a3b8','#f8f9fa','#d93025','#e8590c','#fcc419','#82c91e','#1d9e75','#0ca678','#15aabf','#1971c2','#4263eb','#7950f2','#d6336c'];
 let ekey=null,rkey=null,lastEdit=null,lastFocused=null,_suppressAnim=false,_drag=null,_dragMoved=false;
 let _selected=new Set();
-function cur(){return S[S.mode];}
-
-function syncModeButtons(){
-  document.querySelectorAll('.seg-btn').forEach(b=>{
-    const on=b.dataset.mode===S.mode;
-    b.classList.toggle('on',on);
-    b.setAttribute('aria-selected',on?'true':'false');
-  });
-}
+function cur(){return S;}
 
 function switchPoint(i){
   if(i===PI||i<0||i>=PTS.length)return;
   PI=i;
   S=PTS[i];
   clearSelection();
-  syncModeButtons();
   render();
 }
 
 function addPoint(){
-  const cp=JSON.parse(JSON.stringify({mode:S.mode,regular:S.regular,diamond:S.diamond,freeform:S.freeform}));
+  const cp=JSON.parse(JSON.stringify({rows:S.rows,cols:S.cols,cells:S.cells,bench:S.bench}));
   cp.name='Point '+(PTS.length+1);
   PTS.splice(PI+1,0,cp);
   switchPoint(PI+1);
@@ -41,12 +27,11 @@ function addPoint(){
 
 function delPoint(){
   if(PTS.length<2)return;
-  if(!confirm(`Delete "${S.name}" — this point's formations in all layouts?`))return;
+  if(!confirm(`Delete "${S.name}" and its formation?`))return;
   PTS.splice(PI,1);
   PI=Math.min(PI,PTS.length-1);
   S=PTS[PI];
   clearSelection();
-  syncModeButtons();
   render();
 }
 
@@ -66,11 +51,11 @@ function movePoint(d){
 function bkey(i){return 'b:'+i;}
 function isBench(k){return typeof k==='string'&&k.startsWith('b:');}
 function getPilot(k){return isBench(k)?cur().bench[+k.slice(2)]:cur().cells[k];}
-function pilotInMode(name,m){
+function pilotInPoint(name,pt){
   const lo=name.toLowerCase().trim();
   if(!lo)return false;
-  for(const k in m.cells)if(m.cells[k].name.toLowerCase().trim()===lo)return true;
-  return m.bench.some(p=>p.name.toLowerCase().trim()===lo);
+  for(const k in pt.cells)if(pt.cells[k].name.toLowerCase().trim()===lo)return true;
+  return pt.bench.some(p=>p.name.toLowerCase().trim()===lo);
 }
 const $=id=>document.getElementById(id);
 
@@ -93,14 +78,9 @@ function ws(color,sz){
   </svg>`;
 }
 
-function coordLabel(r,c,mode){
-  const m=mode||S.mode;
-  if(m==='diamond')return `R${r+1}·P${c+1}`;
-  if(m==='freeform')return `R${r+1}·X${c}`;
-  return `R${r+1}·C${c+1}`;
-}
+function coordLabel(r,c){return `R${r+1}·X${c}`;}
 
-function makeSlot(k,d,i,extra,compact,noDropTarget){
+function makeSlot(k,d,i,extra,compact){
   const [r,c]=k.split(',').map(Number);
   const el=document.createElement('button');
   el.type='button';
@@ -122,7 +102,6 @@ function makeSlot(k,d,i,extra,compact,noDropTarget){
     openModal(k);
   });
   if(d) attachDragSource(el,k);
-  if(!noDropTarget) attachSlotDropTarget(el,k);
   return el;
 }
 
@@ -154,7 +133,25 @@ function attachDragSource(el,k){
 // (200ms) lifts the pilot, a fixed-position ghost follows the finger, and
 // release hands off to the same reducers as the mouse path. A quick tap or
 // an early move (scroll) cancels the pending lift.
-const _touch={pending:null,active:false,ghost:null,overEl:null};
+const _touch={pending:null,active:false,ghost:null,overEl:null,scroll:0,scrollT:null};
+
+// While a touch drag holds near the top/bottom of the viewport, scroll the
+// page so off-screen targets (e.g. the bench below a tall canvas) are
+// reachable — native scrolling is suppressed during the drag.
+function touchAutoScroll(y){
+  const M=70;
+  _touch.scroll=y>innerHeight-M?8:y<M?-8:0;
+  if(_touch.scroll&&!_touch.scrollT){
+    _touch.scrollT=setInterval(()=>{
+      if(!_touch.active||!_touch.scroll){
+        clearInterval(_touch.scrollT);
+        _touch.scrollT=null;
+        return;
+      }
+      window.scrollBy(0,_touch.scroll);
+    },16);
+  }
+}
 
 function touchStart(el,k,e){
   if(e.touches.length!==1){touchReset();return;}
@@ -210,6 +207,8 @@ function touchTarget(x,y){
 function touchReset(){
   if(_touch.pending)clearTimeout(_touch.pending.timer);
   _touch.pending=null;
+  _touch.scroll=0;
+  if(_touch.scrollT){clearInterval(_touch.scrollT);_touch.scrollT=null;}
   if(_touch.ghost)_touch.ghost.remove();
   _touch.ghost=null;
   if(_touch.overEl)_touch.overEl.classList.remove('drag-over');
@@ -231,6 +230,7 @@ document.addEventListener('touchmove',e=>{
   }
   e.preventDefault();
   touchMoveGhost(t.clientX,t.clientY);
+  touchAutoScroll(t.clientY);
   if(_touch.overEl)_touch.overEl.classList.remove('drag-over');
   _touch.overEl=null;
   const tgt=touchTarget(t.clientX,t.clientY);
@@ -285,14 +285,7 @@ function computeMultiOffsets(leadKey){
 
 function isValidSlot(k){
   const [a,b]=k.split(',').map(Number);
-  if(a<0||b<0)return false;
-  if(S.mode==='regular')return a<cur().rows&&b<cur().cols;
-  if(S.mode==='diamond'){
-    const widest=cur().rows,nrows=2*widest-1;
-    if(a>=nrows)return false;
-    return b<rowCount(widest,a);
-  }
-  return a<cur().rows&&b<(2*cur().cols-1);
+  return a>=0&&b>=0&&a<cur().rows&&b<(2*cur().cols-1);
 }
 
 function dropMultiOnSlot(multi,dstK){
@@ -317,27 +310,6 @@ function dropMultiOnSlot(multi,dstK){
   _dragMoved=true;
   _suppressAnim=true;
   render();
-}
-
-function attachSlotDropTarget(el,k){
-  el.addEventListener('dragover',e=>{
-    if(!_drag||_drag.src===k)return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect='move';
-  });
-  el.addEventListener('dragenter',()=>{
-    if(!_drag||_drag.src===k)return;
-    el.classList.add('drag-over');
-  });
-  el.addEventListener('dragleave',e=>{
-    if(e.target===el)el.classList.remove('drag-over');
-  });
-  el.addEventListener('drop',e=>{
-    e.preventDefault();
-    el.classList.remove('drag-over');
-    if(!_drag||_drag.src===k)return;
-    dropOnSlot(_drag.src,k);
-  });
 }
 
 function attachFreeformSnap(canvas,ff,hsX,sY,cyOffset,hxMax){
@@ -485,19 +457,54 @@ function renderBench(){
   bench.forEach((d,i)=>list.appendChild(makeBenchItem(d,i)));
 }
 
-function rowCount(widest,r){
-  return widest-Math.abs(r-widest+1);
+function shiftCells(cells,dr,dhx){
+  const out={};
+  for(const k in cells){
+    const [r,hx]=k.split(',').map(Number);
+    out[key(r+dr,hx+dhx)]=cells[k];
+  }
+  return out;
 }
 
-function pilotCount(){return Object.keys(cur().cells).length;}
-function totalSlots(){
-  if(S.mode==='diamond'){
-    const w=cur().rows,n=2*w-1;
-    let t=0;for(let r=0;r<n;r++)t+=rowCount(w,r);
-    return t;
+// With autofit ON the canvas fits the formation: exactly one empty row above
+// and below, and one empty column (two half-steps) left and right of the
+// bounding box. Cell keys shift with the refit so the formation stays compact
+// and centered; returns the applied shift so callers can remap keys they hold.
+// With autofit OFF (the default) the grid is a static 9x9, expanded — never
+// shifted or shrunk — only when pilots sit beyond it.
+function fitGrid(pt){
+  if(!AF){
+    let rows=9,cols=9;
+    for(const k in pt.cells){
+      const [r,hx]=k.split(',').map(Number);
+      rows=Math.max(rows,r+1);
+      while(2*cols-1<=hx)cols++;
+    }
+    pt.rows=rows;
+    pt.cols=cols;
+    return {dr:0,dhx:0};
   }
-  if(S.mode==='freeform')return (2*cur().cols-1)*cur().rows;
-  return cur().rows*cur().cols;
+  const ks=Object.keys(pt.cells);
+  if(!ks.length){
+    pt.rows=5;
+    pt.cols=5;
+    return {dr:0,dhx:0};
+  }
+  let rmin=Infinity,rmax=-Infinity,hmin=Infinity,hmax=-Infinity;
+  for(const k of ks){
+    const [r,hx]=k.split(',').map(Number);
+    if(r<rmin)rmin=r;
+    if(r>rmax)rmax=r;
+    if(hx<hmin)hmin=hx;
+    if(hx>hmax)hmax=hx;
+  }
+  const dr=1-rmin,dhx=2-hmin;
+  if(dr||dhx)pt.cells=shiftCells(pt.cells,dr,dhx);
+  pt.rows=rmax-rmin+3;
+  let hxMax=hmax-hmin+5;
+  if(hxMax%2===0)hxMax++;
+  pt.cols=(hxMax+1)/2;
+  return {dr,dhx};
 }
 
 function renderPoints(){
@@ -533,101 +540,40 @@ function renderPoints(){
   bar.appendChild(acts);
 }
 
-function updateReadout(){
-  const filled=pilotCount(),total=totalSlots();
-  let layout;
-  if(S.mode==='diamond'){
-    const w=cur().rows,n=2*w-1;
-    layout=`<span class="tag">Diamond</span> <span>widest <strong>${w}</strong></span> <span class="dot">·</span> <span><strong>${n}</strong> rows</span>`;
-  } else if(S.mode==='freeform'){
-    const hx=2*cur().cols-1;
-    layout=`<span class="tag">Freeform</span> <span><strong>${cur().rows}</strong> rows</span> <span class="dot">·</span> <span><strong>${hx}</strong> half-cols</span>`;
-  } else {
-    layout=`<span class="tag">Grid</span> <span><strong>${cur().rows}</strong> × <strong>${cur().cols}</strong></span>`;
-  }
-  $('readout').innerHTML=`
-    <span>${PTS.length>1?`<strong>${esc(S.name)}</strong>`:'Formation'}</span>
-    <span class="dot">·</span>
-    ${layout}
-    <span class="dot">·</span>
-    <span><strong>${filled}</strong>/<strong>${total}</strong> assigned</span>
-  `;
-}
-
 function render(){
   const fw=$('fw'); fw.innerHTML='';
-  const isDia=S.mode==='diamond';
-  const isFf=S.mode==='freeform';
-  $('cols-ctrl').style.display=isDia?'none':'flex';
-  $('cols-sep').style.display=isDia?'none':'block';
-  $('rows-label').textContent=isDia?'Widest':'Rows';
-  $('rows').value=cur().rows;
-  if(!isDia)$('cols').value=cur().cols;
-  updateReadout();
-  let i=0;
-  if(isFf){
-    const ff=cur();
-    const cW=70,cH=80,hsX=cW/2,gY=8,sY=cH+gY;
-    const EW=30,EH=30;
-    const hxMax=2*ff.cols-1;
-    const canW=(hxMax-1)*hsX+cW;
-    const canH=ff.rows*sY-gY;
-    const wrap=document.createElement('div');
-    wrap.className='ff-canvas';
-    wrap.style.cssText=`width:${canW}px;height:${canH}px;`;
-    for(let r=0;r<ff.rows;r++){
-      for(let hx=0;hx<hxMax;hx++){
-        const k=key(r,hx),d=ff.cells[k];
-        const cx=hx*hsX+cW/2,cy=r*sY+cH/2;
-        const sw=d?cW:EW,sh=d?cH:EH;
-        const left=cx-sw/2,top=cy-sh/2;
-        const slot=makeSlot(k,d,i++,{left:Math.round(left)+'px',top:Math.round(top)+'px',width:sw+'px',height:sh+'px',position:'absolute'},!d,true);
-        wrap.appendChild(slot);
-      }
+  const sh=fitGrid(cur());
+  if(sh.dr||sh.dhx){
+    _selected=new Set([..._selected].map(k=>{
+      const [r,hx]=k.split(',').map(Number);
+      return key(r+sh.dr,hx+sh.dhx);
+    }));
+    if(lastEdit&&!isBench(lastEdit)){
+      const [r,hx]=lastEdit.split(',').map(Number);
+      lastEdit=key(r+sh.dr,hx+sh.dhx);
     }
-    attachFreeformSnap(wrap,ff,hsX,sY,cH/2,hxMax);
-    fw.appendChild(wrap);
-  } else if(isDia){
-    const widest=cur().rows,nrows=2*widest-1;
-    const cW=70,cH=80,gX=8,gY=8,sX=cW+gX,sY=cH+gY;
-    const canW=widest*sX,canH=nrows*sY;
-    const wrap=document.createElement('div');
-    wrap.style.cssText=`position:relative;width:${canW}px;height:${canH}px;`;
-    const axisV=document.createElement('div');
-    axisV.className='dia-axis dia-axis-v';
-    axisV.style.cssText=`left:${canW/2}px;top:0;height:${canH}px;`;
-    wrap.appendChild(axisV);
-    const axisH=document.createElement('div');
-    axisH.className='dia-axis dia-axis-h';
-    axisH.style.cssText=`top:${(widest-1)*sY+cH/2}px;left:0;width:${canW}px;`;
-    wrap.appendChild(axisH);
-    const mark=document.createElement('div');
-    mark.className='dia-mark';
-    mark.textContent='widest row';
-    mark.style.cssText=`top:${(widest-1)*sY+cH/2-14}px;right:6px;`;
-    wrap.appendChild(mark);
-    for(let r=0;r<nrows;r++){
-      const cnt=rowCount(widest,r);
-      const rW=cnt*sX-gX,sx=(canW-rW)/2,y=r*sY;
-      for(let c=0;c<cnt;c++){
-        const k=key(r,c),d=cur().cells[k],x=sx+c*sX;
-        const slot=makeSlot(k,d,i++,{left:Math.round(x)+'px',top:Math.round(y)+'px',width:cW+'px',height:cH+'px',position:'absolute'});
-        wrap.appendChild(slot);
-      }
-    }
-    fw.appendChild(wrap);
-  } else {
-    const grid=document.createElement('div');
-    grid.className='rgrid';
-    grid.style.cssText=`grid-template-columns:repeat(${cur().cols},70px);grid-auto-rows:80px;width:${cur().cols*70}px;gap:0;`;
-    for(let r=0;r<cur().rows;r++)
-      for(let c=0;c<cur().cols;c++){
-        const k=key(r,c),d=cur().cells[k];
-        const slot=makeSlot(k,d,i++,{width:'70px',height:'80px'});
-        grid.appendChild(slot);
-      }
-    fw.appendChild(grid);
   }
+  const ff=cur();
+  const cW=70,cH=80,hsX=cW/2,gY=8,sY=cH+gY;
+  const EW=30,EH=30;
+  const hxMax=2*ff.cols-1;
+  const canW=(hxMax-1)*hsX+cW;
+  const canH=ff.rows*sY-gY;
+  const wrap=document.createElement('div');
+  wrap.className='ff-canvas';
+  wrap.style.cssText=`width:${canW}px;height:${canH}px;`;
+  let i=0;
+  for(let r=0;r<ff.rows;r++){
+    for(let hx=0;hx<hxMax;hx++){
+      const k=key(r,hx),d=ff.cells[k];
+      const cx=hx*hsX+cW/2,cy=r*sY+cH/2;
+      const sw=d?cW:EW,sh=d?cH:EH;
+      const slot=makeSlot(k,d,i++,{left:Math.round(cx-sw/2)+'px',top:Math.round(cy-sh/2)+'px',width:sw+'px',height:sh+'px',position:'absolute'},!d);
+      wrap.appendChild(slot);
+    }
+  }
+  attachFreeformSnap(wrap,ff,hsX,sY,cH/2,hxMax);
+  fw.appendChild(wrap);
   fw.classList.toggle('animate',!_suppressAnim);
   _suppressAnim=false;
   renderPoints();
@@ -709,21 +655,32 @@ function toast(msg){
 
 function toJSON(){
   return JSON.stringify({
-    points:PTS.map((p,i)=>({name:p.name||'Point '+(i+1),mode:p.mode,regular:p.regular,diamond:p.diamond,freeform:p.freeform})),
-    cur:PI
+    points:PTS.map((p,i)=>({name:p.name||'Point '+(i+1),cells:p.cells,bench:p.bench})),
+    cur:PI,
+    autofit:AF
   },null,2);
 }
 
 function clampDim(n,fallback){
   const v=typeof n==='number'?n:fallback;
-  return Math.max(1,Math.min(12,v||3));
+  return Math.max(1,Math.min(13,v||3));
 }
 
-function normalizeMode(m,fallbackDims,withCols){
+function normalizeForm(m,fallbackDims,withCols){
   if(!m||typeof m!=='object')m={};
+  const cells={};
+  if(m.cells&&typeof m.cells==='object'){
+    for(const k in m.cells){
+      const v=m.cells[k];
+      const mm=/^(\d{1,2}),(\d{1,3})$/.exec(k);
+      if(!mm||+mm[1]>60||+mm[2]>120)continue;
+      if(!v||typeof v.name!=='string'||typeof v.color!=='string')continue;
+      cells[k]=v;
+    }
+  }
   const out={
     rows:clampDim(m.rows,fallbackDims&&fallbackDims.rows),
-    cells:(m.cells&&typeof m.cells==='object')?m.cells:{},
+    cells,
     bench:Array.isArray(m.bench)?m.bench.filter(p=>p&&typeof p.name==='string'&&typeof p.color==='string'):[]
   };
   if(withCols)out.cols=clampDim(m.cols,fallbackDims&&fallbackDims.cols);
@@ -731,43 +688,72 @@ function normalizeMode(m,fallbackDims,withCols){
 }
 
 function parsePoint(d,defName){
-  if(!d||typeof d.mode!=='string')throw new Error('Invalid format');
-  const p={name:(typeof d.name==='string'&&d.name.trim())?d.name.trim().slice(0,24):defName};
-  p.mode=MODES.includes(d.mode)?d.mode:'regular';
+  if(!d||typeof d!=='object')throw new Error('Invalid format');
+  const name=(typeof d.name==='string'&&d.name.trim())?d.name.trim().slice(0,24):defName;
+  if(typeof d.mode==='string'){
+    const p=migratePoint(d,name);
+    fitGrid(p);
+    return p;
+  }
+  if(typeof d.cells!=='object')throw new Error('Invalid format');
+  const p=normalizeForm(d,{rows:5,cols:5},true);
+  p.name=name;
+  fitGrid(p);
+  return p;
+}
+
+// Migrate the retired multi-mode formats onto the freeform half-step grid.
+// The point's saved active mode wins when it has pilots placed: regular
+// (r,c) maps to (r,2c); a diamond row r with cnt slots is centered as
+// hx=(w-1)-(cnt-1)+2c. Every pilot from the other modes' cells and benches
+// lands on the bench (deduped), so nobody is lost in the migration.
+function migratePoint(d,name){
+  const mode=['regular','diamond','freeform'].includes(d.mode)?d.mode:'regular';
   const topDims={rows:d.rows,cols:d.cols};
+  let reg,dia,ff;
   if(d.regular||d.diamond||d.freeform){
-    p.regular=normalizeMode(d.regular,topDims,true);
-    p.diamond=normalizeMode(d.diamond,topDims,false);
-    p.freeform=d.freeform
-      ?normalizeMode(d.freeform,{rows:5,cols:5},true)
-      :{rows:5,cols:5,cells:{},bench:[]};
+    reg=normalizeForm(d.regular,topDims,true);
+    dia=normalizeForm(d.diamond,topDims,false);
+    ff=d.freeform?normalizeForm(d.freeform,{rows:5,cols:5},true):{rows:5,cols:5,cells:{},bench:[]};
   } else if(typeof d.cells==='object'){
-    const legacy=normalizeMode(d,topDims,true);
-    p.regular={rows:legacy.rows,cols:legacy.cols,cells:{},bench:[]};
-    p.diamond={rows:legacy.rows,cells:{},bench:[]};
-    p.freeform={rows:5,cols:5,cells:{},bench:[]};
-    p[p.mode]=p.mode==='regular'
-      ?{rows:legacy.rows,cols:legacy.cols,cells:legacy.cells,bench:legacy.bench}
-      :p.mode==='diamond'
-        ?{rows:legacy.rows,cells:legacy.cells,bench:legacy.bench}
-        :{rows:5,cols:5,cells:legacy.cells,bench:legacy.bench};
-    for(const mn of MODES){
-      if(mn===p.mode)continue;
-      const o=p[mn];
-      for(const k in legacy.cells){
-        const lp=legacy.cells[k];
-        if(!pilotInMode(lp.name,o))o.bench.push({name:lp.name,color:lp.color});
-      }
-      for(const lp of legacy.bench){
-        if(!pilotInMode(lp.name,o))o.bench.push({name:lp.name,color:lp.color});
-      }
-    }
+    const legacy=normalizeForm(d,topDims,true);
+    reg={rows:legacy.rows,cols:legacy.cols,cells:{},bench:[]};
+    dia={rows:legacy.rows,cells:{},bench:[]};
+    ff={rows:5,cols:5,cells:{},bench:[]};
+    if(mode==='regular')reg=legacy;
+    else if(mode==='diamond')dia={rows:legacy.rows,cells:legacy.cells,bench:legacy.bench};
+    else ff={rows:legacy.rows,cols:legacy.cols,cells:legacy.cells,bench:legacy.bench};
   } else throw new Error('Invalid format');
+  const p={name,rows:5,cols:5,cells:{},bench:[]};
+  if(mode==='regular'&&Object.keys(reg.cells).length){
+    for(const k in reg.cells){
+      const [r,c]=k.split(',').map(Number);
+      p.cells[key(r,2*c)]=reg.cells[k];
+    }
+  } else if(mode==='diamond'&&Object.keys(dia.cells).length){
+    const w=dia.rows;
+    for(const k in dia.cells){
+      const [r,c]=k.split(',').map(Number);
+      const cnt=w-Math.abs(r-w+1);
+      p.cells[key(r,(w-1)-(cnt-1)+2*c)]=dia.cells[k];
+    }
+  } else {
+    p.cells=ff.cells;
+  }
+  for(const src of [ff,reg,dia]){
+    for(const k in src.cells){
+      const q=src.cells[k];
+      if(!pilotInPoint(q.name,p))p.bench.push({name:q.name,color:q.color});
+    }
+    for(const q of src.bench)if(!pilotInPoint(q.name,p))p.bench.push({name:q.name,color:q.color});
+  }
   return p;
 }
 
 function fromJSON(str){
   const d=JSON.parse(str);
+  AF=!!d.autofit;
+  $('af-chk').checked=AF;
   if(Array.isArray(d.points)){
     if(!d.points.length)throw new Error('Invalid format');
     PTS=d.points.map((pd,i)=>parsePoint(pd,'Point '+(i+1)));
@@ -778,7 +764,6 @@ function fromJSON(str){
   }
   S=PTS[PI];
   clearSelection();
-  syncModeButtons();
   render();
 }
 
@@ -794,7 +779,7 @@ $('msav').addEventListener('click',()=>{
       toast(`"${n}" is already in the roster`);
       return;
     }
-    if(rk.add)for(const pt of PTS)for(const mn of MODES)pt[mn].bench.push({name:n,color:c});
+    if(rk.add)for(const pt of PTS)pt.bench.push({name:n,color:c});
     else rosterApply(rk.old,{name:n,color:c});
     hideModal('modal-pilot');
     renderRosterList();
@@ -803,15 +788,21 @@ $('msav').addEventListener('click',()=>{
     render();
     return;
   }
-  const wasNew=!getPilot(ekey);
+  const old=getPilot(ekey);
   if(n){
+    // pilot identity is global: a rename/recolor from any slot or bench
+    // entry rewrites every occurrence of that pilot across all points
+    if(old&&n.toLowerCase()!==old.name.toLowerCase().trim()&&rosterHas(n)){
+      toast(`"${n}" is already in the roster`);
+      return;
+    }
+    rosterApply(old?old.name:n,{name:n,color:c});
     setPilot(ekey,{name:n,color:c});
     if(!isBench(ekey))lastEdit=ekey;
-    if(wasNew&&!isBench(ekey)){
-      for(const pt of PTS)for(const mn of MODES){
-        const m=pt[mn];
-        if(m===cur())continue;
-        if(!pilotInMode(n,m))m.bench.push({name:n,color:c});
+    if(!old&&!isBench(ekey)){
+      for(const pt of PTS){
+        if(pt===S)continue;
+        if(!pilotInPoint(n,pt))pt.bench.push({name:n,color:c});
       }
     }
   } else removePilot(ekey);
@@ -844,25 +835,12 @@ $('pname').addEventListener('keydown',e=>{
   if(e.key==='Enter')$('msav').click();
 });
 
-$('rows').addEventListener('change',e=>{
-  cur().rows=Math.max(1,Math.min(12,+e.target.value||1));
-  e.target.value=cur().rows;
+$('af-chk').addEventListener('change',e=>{
+  AF=e.target.checked;
+  _suppressAnim=true;
   render();
 });
-$('cols').addEventListener('change',e=>{
-  cur().cols=Math.max(1,Math.min(12,+e.target.value||1));
-  e.target.value=cur().cols;
-  render();
-});
-document.querySelectorAll('.seg-btn').forEach(b=>{
-  b.addEventListener('click',()=>{
-    if(S.mode===b.dataset.mode)return;
-    S.mode=b.dataset.mode;
-    clearSelection();
-    syncModeButtons();
-    render();
-  });
-});
+
 $('clr').addEventListener('click',()=>{cur().cells={};cur().bench=[];clearSelection();render();});
 
 ['bench-zone','trash-zone'].forEach(id=>{
@@ -997,11 +975,9 @@ function renderSavesList(){
 }
 
 // Roster — the union of distinct pilots (case-insensitive name) across all
-// modes' cells and benches. There is no separate roster store; everything is
-// derived from S, and roster edits rewrite every matching occurrence so a
-// pilot's name/color stops diverging between modes.
-const MODE_TAG={regular:'Grid',diamond:'Diamond',freeform:'Free'};
-
+// points' cells and benches. There is no separate roster store; everything is
+// derived from the plan, and any pilot edit (from the roster or a slot)
+// rewrites every matching occurrence so name/color never diverge.
 function rosterList(){
   const map=new Map();
   const add=(p,loc)=>{
@@ -1013,42 +989,37 @@ function rosterList(){
   };
   PTS.forEach((pt,pi)=>{
     const pre=PTS.length>1?`P${pi+1} `:'';
-    for(const mn of MODES){
-      const m=pt[mn];
-      for(const k in m.cells){
-        const [r,c]=k.split(',').map(Number);
-        add(m.cells[k],pre+MODE_TAG[mn]+' '+coordLabel(r,c,mn));
-      }
-      for(const p of m.bench)add(p,pre+MODE_TAG[mn]+' bench');
+    for(const k in pt.cells){
+      const [r,c]=k.split(',').map(Number);
+      add(pt.cells[k],pre+coordLabel(r,c));
     }
+    for(const p of pt.bench)add(p,pre+'bench');
   });
   return [...map.values()].sort((a,b)=>a.name.localeCompare(b.name));
 }
 
 function rosterApply(old,d){
   const lo=old.toLowerCase().trim();
-  for(const pt of PTS)for(const mn of MODES){
-    const m=pt[mn];
-    for(const k in m.cells)
-      if(m.cells[k].name.toLowerCase().trim()===lo)m.cells[k]={name:d.name,color:d.color};
-    m.bench.forEach((p,i)=>{
-      if(p.name.toLowerCase().trim()===lo)m.bench[i]={name:d.name,color:d.color};
+  for(const pt of PTS){
+    for(const k in pt.cells)
+      if(pt.cells[k].name.toLowerCase().trim()===lo)pt.cells[k]={name:d.name,color:d.color};
+    pt.bench.forEach((p,i)=>{
+      if(p.name.toLowerCase().trim()===lo)pt.bench[i]={name:d.name,color:d.color};
     });
   }
 }
 
 function rosterRemove(old){
   const lo=old.toLowerCase().trim();
-  for(const pt of PTS)for(const mn of MODES){
-    const m=pt[mn];
-    for(const k in m.cells)
-      if(m.cells[k].name.toLowerCase().trim()===lo)delete m.cells[k];
-    pt[mn].bench=m.bench.filter(p=>p.name.toLowerCase().trim()!==lo);
+  for(const pt of PTS){
+    for(const k in pt.cells)
+      if(pt.cells[k].name.toLowerCase().trim()===lo)delete pt.cells[k];
+    pt.bench=pt.bench.filter(p=>p.name.toLowerCase().trim()!==lo);
   }
 }
 
 function rosterHas(name){
-  return PTS.some(pt=>MODES.some(mn=>pilotInMode(name,pt[mn])));
+  return PTS.some(pt=>pilotInPoint(name,pt));
 }
 
 function renderRosterList(){
@@ -1082,7 +1053,7 @@ function renderRosterList(){
       renderRosterList();
       _suppressAnim=true;
       render();
-      toast(`Removed "${p.name}" from all layouts`);
+      toast(`Removed "${p.name}" from all points`);
     });
     list.appendChild(row);
   }
@@ -1091,7 +1062,7 @@ function renderRosterList(){
 function openRosterPilot(rk,name,color){
   hideModal('modal-roster');
   rkey=rk;
-  $('mp-title').textContent=rk.add?'Add pilot to roster':'Edit pilot in all layouts';
+  $('mp-title').textContent=rk.add?'Add pilot to roster':'Edit pilot in all points';
   $('pname').value=name||'';
   $('pcol').value=color||'#1d9e75';
   prevUpdate();
