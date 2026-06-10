@@ -613,13 +613,15 @@ function render(){
   const wrap=document.createElement('div');
   wrap.className='ff-canvas';
   wrap.style.cssText=`width:${canW}px;height:${canH}px;`;
-  let i=0;
+  // only filled slots take part in the entrance stagger — empty positions get
+  // index 0 and appear at once, so a loaded plan doesn't crawl in over seconds
+  let fi=0;
   for(let r=0;r<ff.rows;r++){
     for(let hx=0;hx<hxMax;hx++){
       const k=key(r,hx),d=ff.cells[k];
       const cx=hx*hsX+cW/2,cy=r*sY+cH/2;
       const sw=d?cW:EW,sh=d?cH:EH;
-      const slot=makeSlot(k,d,i++,{left:Math.round(cx-sw/2)+'px',top:Math.round(cy-sh/2)+'px',width:sw+'px',height:sh+'px',position:'absolute'},!d);
+      const slot=makeSlot(k,d,d?++fi:0,{left:Math.round(cx-sw/2)+'px',top:Math.round(cy-sh/2)+'px',width:sw+'px',height:sh+'px',position:'absolute'},!d);
       wrap.appendChild(slot);
     }
   }

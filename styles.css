@@ -325,7 +325,7 @@ input[type=text]:focus-visible,
 }
 .fw.animate .slot{
   animation:slot-in .32s cubic-bezier(.2,.8,.2,1) both;
-  animation-delay:calc(var(--i,0) * 18ms);
+  animation-delay:min(calc(var(--i,0) * 14ms),.35s);
 }
 
 .slot.compact{padding:0;}
