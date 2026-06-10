@@ -6,7 +6,7 @@ const S={
   freeform:{rows:5,cols:5,cells:{},bench:[]}
 };
 const PALETTE=['#1a1d22','#94a3b8','#f8f9fa','#d93025','#e8590c','#fcc419','#82c91e','#1d9e75','#0ca678','#15aabf','#1971c2','#4263eb','#7950f2','#d6336c'];
-let ekey=null,lastEdit=null,lastFocused=null,_suppressAnim=false,_drag=null,_dragMoved=false;
+let ekey=null,rkey=null,lastEdit=null,lastFocused=null,_suppressAnim=false,_drag=null,_dragMoved=false;
 let _selected=new Set();
 function cur(){return S[S.mode];}
 function others(){return MODES.filter(m=>m!==S.mode).map(m=>S[m]);}
@@ -40,9 +40,10 @@ function ws(color,sz){
   </svg>`;
 }
 
-function coordLabel(r,c){
-  if(S.mode==='diamond')return `R${r+1}·P${c+1}`;
-  if(S.mode==='freeform')return `R${r+1}·X${c}`;
+function coordLabel(r,c,mode){
+  const m=mode||S.mode;
+  if(m==='diamond')return `R${r+1}·P${c+1}`;
+  if(m==='freeform')return `R${r+1}·X${c}`;
   return `R${r+1}·C${c+1}`;
 }
 
@@ -584,11 +585,14 @@ function showModal(id){
 }
 function hideModal(id){
   $(id).style.display='none';
+  if(id==='modal-pilot')rkey=null;
   if(lastFocused&&typeof lastFocused.focus==='function')lastFocused.focus();
 }
 
 function openModal(k){
   ekey=k;
+  rkey=null;
+  $('mp-title').textContent='Assign pilot';
   const d=getPilot(k)||{};
   $('pname').value=d.name||'';
   $('pcol').value=d.color||'#1d9e75';
@@ -680,6 +684,22 @@ renderSwatches();
 $('pname').addEventListener('input',prevUpdate);
 $('msav').addEventListener('click',()=>{
   const n=$('pname').value.trim(),c=$('pcol').value;
+  const rk=rkey;
+  if(rk){
+    if(!n){toast('Pilot name required');return;}
+    if(rosterHas(n)&&(rk.add||n.toLowerCase()!==rk.old.toLowerCase().trim())){
+      toast(`"${n}" is already in the roster`);
+      return;
+    }
+    if(rk.add)for(const mn of MODES)S[mn].bench.push({name:n,color:c});
+    else rosterApply(rk.old,{name:n,color:c});
+    hideModal('modal-pilot');
+    renderRosterList();
+    showModal('modal-roster');
+    _suppressAnim=true;
+    render();
+    return;
+  }
   const wasNew=!getPilot(ekey);
   if(n){
     setPilot(ekey,{name:n,color:c});
@@ -694,8 +714,22 @@ $('msav').addEventListener('click',()=>{
   _suppressAnim=true;
   render();
 });
-$('mcan').addEventListener('click',()=>hideModal('modal-pilot'));
+$('mcan').addEventListener('click',()=>{
+  const rk=rkey;
+  hideModal('modal-pilot');
+  if(rk)showModal('modal-roster');
+});
 $('mrem').addEventListener('click',()=>{
+  const rk=rkey;
+  if(rk){
+    rosterRemove(rk.old);
+    hideModal('modal-pilot');
+    renderRosterList();
+    showModal('modal-roster');
+    _suppressAnim=true;
+    render();
+    return;
+  }
   removePilot(ekey);
   hideModal('modal-pilot');
   _suppressAnim=true;
@@ -861,6 +895,108 @@ function renderSavesList(){
   }
 }
 
+// Roster — the union of distinct pilots (case-insensitive name) across all
+// modes' cells and benches. There is no separate roster store; everything is
+// derived from S, and roster edits rewrite every matching occurrence so a
+// pilot's name/color stops diverging between modes.
+const MODE_TAG={regular:'Grid',diamond:'Diamond',freeform:'Free'};
+
+function rosterList(){
+  const map=new Map();
+  const add=(p,loc)=>{
+    const lo=p.name.toLowerCase().trim();
+    if(!lo)return;
+    let e=map.get(lo);
+    if(!e){e={name:p.name,color:p.color,locs:[]};map.set(lo,e);}
+    e.locs.push(loc);
+  };
+  for(const mn of MODES){
+    const m=S[mn];
+    for(const k in m.cells){
+      const [r,c]=k.split(',').map(Number);
+      add(m.cells[k],MODE_TAG[mn]+' '+coordLabel(r,c,mn));
+    }
+    for(const p of m.bench)add(p,MODE_TAG[mn]+' bench');
+  }
+  return [...map.values()].sort((a,b)=>a.name.localeCompare(b.name));
+}
+
+function rosterApply(old,d){
+  const lo=old.toLowerCase().trim();
+  for(const mn of MODES){
+    const m=S[mn];
+    for(const k in m.cells)
+      if(m.cells[k].name.toLowerCase().trim()===lo)m.cells[k]={name:d.name,color:d.color};
+    m.bench.forEach((p,i)=>{
+      if(p.name.toLowerCase().trim()===lo)m.bench[i]={name:d.name,color:d.color};
+    });
+  }
+}
+
+function rosterRemove(old){
+  const lo=old.toLowerCase().trim();
+  for(const mn of MODES){
+    const m=S[mn];
+    for(const k in m.cells)
+      if(m.cells[k].name.toLowerCase().trim()===lo)delete m.cells[k];
+    m.bench=m.bench.filter(p=>p.name.toLowerCase().trim()!==lo);
+  }
+}
+
+function rosterHas(name){
+  return MODES.some(mn=>pilotInMode(name,S[mn]));
+}
+
+function renderRosterList(){
+  const list=$('roster-list');
+  list.innerHTML='';
+  const ros=rosterList();
+  if(!ros.length){
+    const e=document.createElement('div');
+    e.className='saves-empty';
+    e.textContent='No pilots yet — click a slot or add one here.';
+    list.appendChild(e);
+    return;
+  }
+  for(const p of ros){
+    const row=document.createElement('div');
+    row.className='save-item roster-item';
+    row.innerHTML=`<span class="roster-ws" aria-hidden="true">${ws(p.color,26)}</span>
+      <span class="roster-info">
+        <span class="save-name-text">${esc(p.name)}</span>
+        <span class="roster-locs">${p.locs.map(esc).join(' · ')}</span>
+      </span>
+      <div class="save-actions">
+        <button class="bprimary" data-act="edit">Edit</button>
+        <button class="bdanger" data-act="del">Remove</button>
+      </div>`;
+    row.querySelector('[data-act="edit"]').addEventListener('click',()=>{
+      openRosterPilot({old:p.name},p.name,p.color);
+    });
+    row.querySelector('[data-act="del"]').addEventListener('click',()=>{
+      rosterRemove(p.name);
+      renderRosterList();
+      _suppressAnim=true;
+      render();
+      toast(`Removed "${p.name}" from all layouts`);
+    });
+    list.appendChild(row);
+  }
+}
+
+function openRosterPilot(rk,name,color){
+  hideModal('modal-roster');
+  rkey=rk;
+  $('mp-title').textContent=rk.add?'Add pilot to roster':'Edit pilot in all layouts';
+  $('pname').value=name||'';
+  $('pcol').value=color||'#1d9e75';
+  prevUpdate();
+  markActiveSwatch($('pcol').value);
+  $('mrem').style.display=rk.add?'none':'';
+  showModal('modal-pilot');
+  setTimeout(()=>$('pname').focus(),40);
+}
+
 function b64encode(str){
   const bytes=new TextEncoder().encode(str);
   let bin='';
@@ -919,6 +1055,13 @@ $('save-name').addEventListener('keydown',e=>{
 });
 $('saves-close').addEventListener('click',()=>hideModal('modal-saves'));
 
+$('btn-roster').addEventListener('click',()=>{
+  renderRosterList();
+  showModal('modal-roster');
+});
+$('roster-add').addEventListener('click',()=>openRosterPilot({add:true}));
+$('roster-close').addEventListener('click',()=>hideModal('modal-roster'));
+
 $('btn-share').addEventListener('click',()=>{
   const url=shareURL();
   const done=()=>toast('Share link copied');
@@ -934,7 +1077,7 @@ $('btn-share').addEventListener('click',()=>{
 document.addEventListener('keydown',e=>{
   if(e.key!=='Escape')return;
   let closedModal=false;
-  ['modal-pilot','modal-export','modal-import','modal-saves'].forEach(id=>{
+  ['modal-pilot','modal-export','modal-import','modal-saves','modal-roster'].forEach(id=>{
     if($(id).style.display==='flex'){hideModal(id);closedModal=true;}
   });
   if(!closedModal)clearSelection();

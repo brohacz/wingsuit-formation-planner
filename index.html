@@ -40,6 +40,10 @@
       </div>
     </div>
     <div class="action-group">
+      <button class="ico-btn" id="btn-roster" aria-label="Pilot roster">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5.5" cy="5" r="2.2"/><path d="M1.5 13c0-2.2 1.8-4 4-4s4 1.8 4 4"/><circle cx="11.5" cy="5.5" r="1.7"/><path d="M10.5 9.3c1.9.3 3.5 1.9 3.5 3.7"/></svg>
+        Roster
+      </button>
       <button class="ico-btn" id="btn-export" aria-label="Export formation">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2v8M5 7l3 3 3-3M3 12h10"/></svg>
         Export
@@ -135,6 +139,18 @@
     <div class="saves-list" id="saves-list"></div>
     <div class="mbtns">
       <button class="bprimary" id="saves-close">Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="modal-roster" style="display:none;" class="overlay" role="dialog" aria-modal="true" aria-labelledby="mr-title">
+  <div class="mcard wide">
+    <h3 id="mr-title">Pilot roster</h3>
+    <label>Every pilot across all three layouts — edits here apply everywhere</label>
+    <div class="saves-list" id="roster-list"></div>
+    <div class="mbtns">
+      <button class="bsuccess" id="roster-add">Add pilot</button>
+      <button class="bprimary" id="roster-close">Close</button>
     </div>
   </div>
 </div>

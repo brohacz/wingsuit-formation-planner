@@ -61,6 +61,12 @@ The three modes are otherwise isolated, with one exception: when a pilot is **cr
 - Edits, drags, removes, and trash drops do *not* propagate. Mode-isolated state means each mode owns its own positions and color choices.
 - The "Clear" button clears only the current mode.
 
+## Pilot roster
+
+The Roster button opens `modal-roster`, the one place where a pilot can be edited *across* all modes (per-slot edits stay mode-isolated; the roster exists to re-unify names/colors when they diverge). There is no separate roster data structure — `rosterList()` derives the roster from `S` on every open: the union of distinct pilots (case-insensitive trimmed name, first-seen color wins) over every mode's `cells` and `bench`, each with a list of location strings (`MODE_TAG[mode] + coordLabel(r, c, mode)` or `"<tag> bench"`).
+
+Row actions and the Add button reuse `modal-pilot` instead of duplicating the name/swatch UI. The module flag `rkey` switches the modal's semantics: `null` is the normal per-slot flow keyed by `ekey`; `{old: name}` means "edit this pilot everywhere" (save → `rosterApply` rewrites every matching cell/bench entry in all modes; Remove → `rosterRemove` deletes them all); `{add: true}` means "new roster pilot" (save → pushed onto **every** mode's bench). Saving with a name that already belongs to a different roster pilot is rejected with a toast (case-insensitive; renaming a pilot to a different casing of itself is allowed). Closing `modal-pilot` always clears `rkey` (in `hideModal`), and `openModal` resets it plus the modal title, so a roster edit can never leak into the next slot edit. Save/Cancel/Remove in roster context return to the reopened roster modal.
+
 ## Drag-and-drop
 
 Pilots can be dragged between any two slots (swap or move), from a slot to the bench (rest), from the bench back to a slot (deploy, swapping if occupied), and from either source onto the trash zone (remove).
