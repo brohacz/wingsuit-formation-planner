@@ -10,6 +10,45 @@ let ekey=null,rkey=null,lastEdit=null,lastFocused=null,_suppressAnim=false,_drag
 let _selected=new Set();
 function cur(){return S;}
 
+// Undo/redo — a stack of toJSON() snapshots captured at the end of every
+// render(). Entries are only pushed when the DATA changed; switching the
+// active point just updates the current entry's `cur`, so Ctrl+Z never walks
+// back through navigation, but an undo still jumps to the point where the
+// change happened. Undo/redo restore via fromJSON with _restoring set so the
+// restore render doesn't itself touch the history.
+let _hist=[],_hi=-1,_restoring=false;
+const HIST_MAX=100;
+
+function histKey(s){return s.replace(/"cur": ?\d+/,'"cur":0');}
+
+function snapshot(){
+  if(_restoring)return;
+  const s=toJSON();
+  if(_hi>=0&&histKey(_hist[_hi])===histKey(s)){
+    _hist[_hi]=s;
+    return;
+  }
+  _hist.splice(_hi+1);
+  _hist.push(s);
+  if(_hist.length>HIST_MAX)_hist.shift();
+  _hi=_hist.length-1;
+}
+
+function applyHist(d){
+  const j=_hi+d;
+  if(j<0||j>=_hist.length)return;
+  _hi=j;
+  _restoring=true;
+  try{fromJSON(_hist[j]);}finally{_restoring=false;}
+  updateHistUI();
+  toast(d<0?'Undo':'Redo');
+}
+
+function updateHistUI(){
+  $('btn-undo').disabled=_hi<=0;
+  $('btn-redo').disabled=_hi>=_hist.length-1;
+}
+
 // FLIP animation across points: pilots are matched by name (identity is
 // global), so on a point switch each pilot's card glides from its old
 // position to the new one. Cards that enter the formation (or cross between
@@ -164,53 +203,71 @@ function ws(color,sz){
 
 function coordLabel(r,c){return `R${r+1}·X${c}`;}
 
-function makeSlot(k,d,i,extra,compact){
+// Slots are rendered as one big HTML string per canvas (a single innerHTML
+// parse beats hundreds of small ones) and behavior is event-delegated on the
+// canvas in wireCanvas() — no per-slot listeners.
+function slotHTML(k,d,i,style,compact){
   const [r,c]=k.split(',').map(Number);
-  const el=document.createElement('button');
-  el.type='button';
-  el.className='slot'+(d?' filled':'')+(compact?' compact':'');
-  el.dataset.key=k;
-  el.style.setProperty('--i',i);
-  if(d) el.style.setProperty('--suit',d.color);
-  el.setAttribute('aria-label',d
-    ?`Slot ${coordLabel(r,c)}, ${d.name||'unnamed'}, ${d.color} suit, click to edit`
-    :`Slot ${coordLabel(r,c)}, empty, click to assign pilot`);
-  if(extra) Object.assign(el.style,extra);
+  const cls='slot'+(d?' filled':'')+(compact?' compact':'');
+  const aria=d
+    ?`Slot ${coordLabel(r,c)}, ${esc(d.name||'unnamed')}, ${esc(d.color)} suit, click to edit`
+    :`Slot ${coordLabel(r,c)}, empty, click to assign pilot`;
   const inner=d
     ? `<div class="slot-svg">${ws(d.color,40)}</div><div class="slot-name">${esc(d.name||'(unnamed)')}</div>`
     : `<div class="slot-cross"></div>`;
-  el.innerHTML=inner;
-  el.addEventListener('click',e=>{
-    if(_dragMoved){_dragMoved=false;return;}
-    if((e.metaKey||e.ctrlKey)&&d){toggleSelect(k);return;}
-    openModal(k);
+  return `<button type="button" class="${cls}" data-key="${k}"${d?' draggable="true"':''} `+
+    `style="--i:${i};${d?`--suit:${esc(d.color)};`:''}${style}" aria-label="${aria}">${inner}</button>`;
+}
+
+function slotClick(el,e){
+  const k=el.dataset.key;
+  if(_dragMoved){_dragMoved=false;return;}
+  if((e.metaKey||e.ctrlKey)&&cur().cells[k]){toggleSelect(k);return;}
+  openModal(k);
+}
+
+function dragStartHandler(el,k,e){
+  stopPlay();
+  let multi=null;
+  if(_selected.has(k)&&_selected.size>1){
+    multi=computeMultiOffsets(k);
+    document.querySelectorAll('.slot.selected').forEach(s=>s.classList.add('dragging'));
+  } else {
+    el.classList.add('dragging');
+    if(!_selected.has(k))clearSelection();
+  }
+  _drag={src:k,multi:multi};
+  _dragMoved=false;
+  e.dataTransfer.effectAllowed='move';
+  e.dataTransfer.setData('text/plain',k);
+}
+
+function dragEndHandler(){
+  document.querySelectorAll('.dragging').forEach(s=>s.classList.remove('dragging'));
+  document.querySelectorAll('.drag-over').forEach(s=>s.classList.remove('drag-over'));
+  _drag=null;
+}
+
+function wireCanvas(wrap){
+  wrap.addEventListener('click',e=>{
+    const el=e.target.closest('.slot');
+    if(el)slotClick(el,e);
   });
-  if(d) attachDragSource(el,k);
-  return el;
+  wrap.addEventListener('dragstart',e=>{
+    const el=e.target.closest('.slot.filled');
+    if(el)dragStartHandler(el,el.dataset.key,e);
+  });
+  wrap.addEventListener('dragend',dragEndHandler);
+  wrap.addEventListener('touchstart',e=>{
+    const el=e.target.closest('.slot.filled');
+    if(el)touchStart(el,el.dataset.key,e);
+  },{passive:true});
 }
 
 function attachDragSource(el,k){
   el.draggable=true;
-  el.addEventListener('dragstart',e=>{
-    stopPlay();
-    let multi=null;
-    if(_selected.has(k)&&_selected.size>1){
-      multi=computeMultiOffsets(k);
-      document.querySelectorAll('.slot.selected').forEach(s=>s.classList.add('dragging'));
-    } else {
-      el.classList.add('dragging');
-      if(!_selected.has(k))clearSelection();
-    }
-    _drag={src:k,multi:multi};
-    _dragMoved=false;
-    e.dataTransfer.effectAllowed='move';
-    e.dataTransfer.setData('text/plain',k);
-  });
-  el.addEventListener('dragend',()=>{
-    document.querySelectorAll('.dragging').forEach(s=>s.classList.remove('dragging'));
-    document.querySelectorAll('.drag-over').forEach(s=>s.classList.remove('drag-over'));
-    _drag=null;
-  });
+  el.addEventListener('dragstart',e=>dragStartHandler(el,k,e));
+  el.addEventListener('dragend',dragEndHandler);
   el.addEventListener('touchstart',e=>touchStart(el,k,e),{passive:true});
 }
 
@@ -654,16 +711,17 @@ function render(){
   wrap.style.cssText=`width:${canW}px;height:${canH}px;`;
   // only filled slots take part in the entrance stagger — empty positions get
   // index 0 and appear at once, so a loaded plan doesn't crawl in over seconds
-  let fi=0;
+  let fi=0,html='';
   for(let r=0;r<ff.rows;r++){
     for(let hx=0;hx<hxMax;hx++){
       const k=key(r,hx),d=ff.cells[k];
       const cx=hx*hsX+cW/2,cy=r*sY+cH/2;
       const sw=d?cW:EW,sh=d?cH:EH;
-      const slot=makeSlot(k,d,d?++fi:0,{left:Math.round(cx-sw/2)+'px',top:Math.round(cy-sh/2)+'px',width:sw+'px',height:sh+'px',position:'absolute'},!d);
-      wrap.appendChild(slot);
+      html+=slotHTML(k,d,d?++fi:0,`position:absolute;left:${Math.round(cx-sw/2)}px;top:${Math.round(cy-sh/2)}px;width:${sw}px;height:${sh}px`,!d);
     }
   }
+  wrap.innerHTML=html;
+  wireCanvas(wrap);
   attachFreeformSnap(wrap,ff,hsX,sY,cH/2,hxMax);
   fw.appendChild(wrap);
   fw.classList.toggle('animate',!_suppressAnim);
@@ -672,6 +730,8 @@ function render(){
   renderBench();
   applySelectedVisual();
   autosave();
+  snapshot();
+  updateHistUI();
   if(lastEdit){
     const target=fw.querySelector(`.slot[data-key="${lastEdit}"]`);
     if(target){
@@ -1224,6 +1284,9 @@ $('save-name').addEventListener('keydown',e=>{
 });
 $('saves-close').addEventListener('click',()=>hideModal('modal-saves'));
 
+$('btn-undo').addEventListener('click',()=>applyHist(-1));
+$('btn-redo').addEventListener('click',()=>applyHist(1));
+
 $('btn-roster').addEventListener('click',()=>{
   renderRosterList();
   showModal('modal-roster');
@@ -1244,6 +1307,16 @@ $('btn-share').addEventListener('click',()=>{
 });
 
 document.addEventListener('keydown',e=>{
+  if(e.ctrlKey||e.metaKey){
+    const k=e.key.toLowerCase();
+    if(k==='z'||k==='y'){
+      const t=e.target;
+      if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'))return;
+      e.preventDefault();
+      applyHist((k==='y'||e.shiftKey)?1:-1);
+      return;
+    }
+  }
   if(e.key!=='Escape')return;
   stopPlay();
   let closedModal=false;

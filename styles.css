@@ -157,6 +157,8 @@ input[type=text]:focus-visible,
 .ico-btn:hover{background:var(--color-background-secondary);color:var(--color-text-primary);border-color:var(--color-border-primary);}
 .ico-btn.danger:hover{background:var(--color-background-danger);color:var(--color-text-danger);border-color:var(--color-border-danger);}
 .ico-btn svg{width:13px;height:13px;flex-shrink:0;}
+.ico-btn:disabled{opacity:.35;cursor:default;}
+.ico-btn:disabled:hover{background:transparent;color:var(--color-text-secondary);border-color:var(--color-border-tertiary);}
 
 .points-bar{
   display:flex;
