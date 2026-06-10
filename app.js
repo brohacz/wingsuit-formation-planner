@@ -1,15 +1,68 @@
 const MODES=['regular','diamond','freeform'];
-const S={
+// S is the ACTIVE point of the dive plan. PTS holds every point (S===PTS[PI]);
+// switching points swaps S wholesale, so cur()/render() and everything below
+// keep working on whichever point is active.
+let S={
+  name:'Point 1',
   mode:'regular',
   regular:{rows:3,cols:3,cells:{},bench:[]},
   diamond:{rows:3,cells:{},bench:[]},
   freeform:{rows:5,cols:5,cells:{},bench:[]}
 };
+let PTS=[S],PI=0;
 const PALETTE=['#1a1d22','#94a3b8','#f8f9fa','#d93025','#e8590c','#fcc419','#82c91e','#1d9e75','#0ca678','#15aabf','#1971c2','#4263eb','#7950f2','#d6336c'];
 let ekey=null,rkey=null,lastEdit=null,lastFocused=null,_suppressAnim=false,_drag=null,_dragMoved=false;
 let _selected=new Set();
 function cur(){return S[S.mode];}
-function others(){return MODES.filter(m=>m!==S.mode).map(m=>S[m]);}
+
+function syncModeButtons(){
+  document.querySelectorAll('.seg-btn').forEach(b=>{
+    const on=b.dataset.mode===S.mode;
+    b.classList.toggle('on',on);
+    b.setAttribute('aria-selected',on?'true':'false');
+  });
+}
+
+function switchPoint(i){
+  if(i===PI||i<0||i>=PTS.length)return;
+  PI=i;
+  S=PTS[i];
+  clearSelection();
+  syncModeButtons();
+  render();
+}
+
+function addPoint(){
+  const cp=JSON.parse(JSON.stringify({mode:S.mode,regular:S.regular,diamond:S.diamond,freeform:S.freeform}));
+  cp.name='Point '+(PTS.length+1);
+  PTS.splice(PI+1,0,cp);
+  switchPoint(PI+1);
+}
+
+function delPoint(){
+  if(PTS.length<2)return;
+  if(!confirm(`Delete "${S.name}" — this point's formations in all layouts?`))return;
+  PTS.splice(PI,1);
+  PI=Math.min(PI,PTS.length-1);
+  S=PTS[PI];
+  clearSelection();
+  syncModeButtons();
+  render();
+}
+
+function renamePoint(){
+  const n=prompt('Point name:',S.name);
+  if(n&&n.trim())S.name=n.trim().slice(0,24);
+  render();
+}
+
+function movePoint(d){
+  const j=PI+d;
+  if(j<0||j>=PTS.length)return;
+  [PTS[PI],PTS[j]]=[PTS[j],PTS[PI]];
+  PI=j;
+  render();
+}
 function bkey(i){return 'b:'+i;}
 function isBench(k){return typeof k==='string'&&k.startsWith('b:');}
 function getPilot(k){return isBench(k)?cur().bench[+k.slice(2)]:cur().cells[k];}
@@ -447,6 +500,39 @@ function totalSlots(){
   return cur().rows*cur().cols;
 }
 
+function renderPoints(){
+  const bar=$('points-bar');
+  bar.innerHTML='';
+  PTS.forEach((p,i)=>{
+    const chip=document.createElement('button');
+    chip.type='button';
+    chip.className='pt-chip'+(i===PI?' on':'');
+    chip.innerHTML=`<span class="pt-num">${i+1}</span>${esc(p.name)}`;
+    chip.setAttribute('aria-label',`Point ${i+1}: ${p.name}${i===PI?', active':''}`);
+    chip.addEventListener('click',()=>switchPoint(i));
+    bar.appendChild(chip);
+  });
+  const acts=document.createElement('div');
+  acts.className='pt-acts';
+  const mk=(label,title,fn,dis)=>{
+    const b=document.createElement('button');
+    b.type='button';
+    b.className='pt-btn';
+    b.innerHTML=label;
+    b.title=title;
+    b.setAttribute('aria-label',title);
+    b.disabled=!!dis;
+    b.addEventListener('click',fn);
+    acts.appendChild(b);
+  };
+  mk('+ Point','Add point (copy of current)',addPoint);
+  mk('&#9998;','Rename point',renamePoint);
+  mk('&#9664;','Move point earlier',()=>movePoint(-1),PI===0);
+  mk('&#9654;','Move point later',()=>movePoint(1),PI===PTS.length-1);
+  mk('&times;','Delete point',delPoint,PTS.length<2);
+  bar.appendChild(acts);
+}
+
 function updateReadout(){
   const filled=pilotCount(),total=totalSlots();
   let layout;
@@ -460,7 +546,7 @@ function updateReadout(){
     layout=`<span class="tag">Grid</span> <span><strong>${cur().rows}</strong> × <strong>${cur().cols}</strong></span>`;
   }
   $('readout').innerHTML=`
-    <span>Formation</span>
+    <span>${PTS.length>1?`<strong>${esc(S.name)}</strong>`:'Formation'}</span>
     <span class="dot">·</span>
     ${layout}
     <span class="dot">·</span>
@@ -544,6 +630,7 @@ function render(){
   }
   fw.classList.toggle('animate',!_suppressAnim);
   _suppressAnim=false;
+  renderPoints();
   renderBench();
   applySelectedVisual();
   autosave();
@@ -621,7 +708,10 @@ function toast(msg){
 }
 
 function toJSON(){
-  return JSON.stringify({mode:S.mode,regular:S.regular,diamond:S.diamond,freeform:S.freeform},null,2);
+  return JSON.stringify({
+    points:PTS.map((p,i)=>({name:p.name||'Point '+(i+1),mode:p.mode,regular:p.regular,diamond:p.diamond,freeform:p.freeform})),
+    cur:PI
+  },null,2);
 }
 
 function clampDim(n,fallback){
@@ -640,42 +730,55 @@ function normalizeMode(m,fallbackDims,withCols){
   return out;
 }
 
-function fromJSON(str){
-  const d=JSON.parse(str);
-  if(typeof d.mode!=='string')throw new Error('Invalid format');
-  S.mode=MODES.includes(d.mode)?d.mode:'regular';
+function parsePoint(d,defName){
+  if(!d||typeof d.mode!=='string')throw new Error('Invalid format');
+  const p={name:(typeof d.name==='string'&&d.name.trim())?d.name.trim().slice(0,24):defName};
+  p.mode=MODES.includes(d.mode)?d.mode:'regular';
   const topDims={rows:d.rows,cols:d.cols};
   if(d.regular||d.diamond||d.freeform){
-    S.regular=normalizeMode(d.regular,topDims,true);
-    S.diamond=normalizeMode(d.diamond,topDims,false);
-    S.freeform=d.freeform
+    p.regular=normalizeMode(d.regular,topDims,true);
+    p.diamond=normalizeMode(d.diamond,topDims,false);
+    p.freeform=d.freeform
       ?normalizeMode(d.freeform,{rows:5,cols:5},true)
       :{rows:5,cols:5,cells:{},bench:[]};
   } else if(typeof d.cells==='object'){
     const legacy=normalizeMode(d,topDims,true);
-    S.regular={rows:legacy.rows,cols:legacy.cols,cells:{},bench:[]};
-    S.diamond={rows:legacy.rows,cells:{},bench:[]};
-    S.freeform={rows:5,cols:5,cells:{},bench:[]};
-    S[S.mode]=S.mode==='regular'
+    p.regular={rows:legacy.rows,cols:legacy.cols,cells:{},bench:[]};
+    p.diamond={rows:legacy.rows,cells:{},bench:[]};
+    p.freeform={rows:5,cols:5,cells:{},bench:[]};
+    p[p.mode]=p.mode==='regular'
       ?{rows:legacy.rows,cols:legacy.cols,cells:legacy.cells,bench:legacy.bench}
-      :S.mode==='diamond'
+      :p.mode==='diamond'
         ?{rows:legacy.rows,cells:legacy.cells,bench:legacy.bench}
         :{rows:5,cols:5,cells:legacy.cells,bench:legacy.bench};
-    for(const o of others()){
+    for(const mn of MODES){
+      if(mn===p.mode)continue;
+      const o=p[mn];
       for(const k in legacy.cells){
-        const p=legacy.cells[k];
-        if(!pilotInMode(p.name,o))o.bench.push({name:p.name,color:p.color});
+        const lp=legacy.cells[k];
+        if(!pilotInMode(lp.name,o))o.bench.push({name:lp.name,color:lp.color});
       }
-      for(const p of legacy.bench){
-        if(!pilotInMode(p.name,o))o.bench.push({name:p.name,color:p.color});
+      for(const lp of legacy.bench){
+        if(!pilotInMode(lp.name,o))o.bench.push({name:lp.name,color:lp.color});
       }
     }
   } else throw new Error('Invalid format');
-  document.querySelectorAll('.seg-btn').forEach(b=>{
-    const on=b.dataset.mode===S.mode;
-    b.classList.toggle('on',on);
-    b.setAttribute('aria-selected',on?'true':'false');
-  });
+  return p;
+}
+
+function fromJSON(str){
+  const d=JSON.parse(str);
+  if(Array.isArray(d.points)){
+    if(!d.points.length)throw new Error('Invalid format');
+    PTS=d.points.map((pd,i)=>parsePoint(pd,'Point '+(i+1)));
+    PI=Math.max(0,Math.min(PTS.length-1,typeof d.cur==='number'?d.cur|0:0));
+  } else {
+    PTS=[parsePoint(d,'Point 1')];
+    PI=0;
+  }
+  S=PTS[PI];
+  clearSelection();
+  syncModeButtons();
   render();
 }
 
@@ -691,7 +794,7 @@ $('msav').addEventListener('click',()=>{
       toast(`"${n}" is already in the roster`);
       return;
     }
-    if(rk.add)for(const mn of MODES)S[mn].bench.push({name:n,color:c});
+    if(rk.add)for(const pt of PTS)for(const mn of MODES)pt[mn].bench.push({name:n,color:c});
     else rosterApply(rk.old,{name:n,color:c});
     hideModal('modal-pilot');
     renderRosterList();
@@ -705,8 +808,10 @@ $('msav').addEventListener('click',()=>{
     setPilot(ekey,{name:n,color:c});
     if(!isBench(ekey))lastEdit=ekey;
     if(wasNew&&!isBench(ekey)){
-      for(const o of others()){
-        if(!pilotInMode(n,o))o.bench.push({name:n,color:c});
+      for(const pt of PTS)for(const mn of MODES){
+        const m=pt[mn];
+        if(m===cur())continue;
+        if(!pilotInMode(n,m))m.bench.push({name:n,color:c});
       }
     }
   } else removePilot(ekey);
@@ -754,11 +859,7 @@ document.querySelectorAll('.seg-btn').forEach(b=>{
     if(S.mode===b.dataset.mode)return;
     S.mode=b.dataset.mode;
     clearSelection();
-    document.querySelectorAll('.seg-btn').forEach(x=>{
-      const on=x===b;
-      x.classList.toggle('on',on);
-      x.setAttribute('aria-selected',on?'true':'false');
-    });
+    syncModeButtons();
     render();
   });
 });
@@ -910,21 +1011,24 @@ function rosterList(){
     if(!e){e={name:p.name,color:p.color,locs:[]};map.set(lo,e);}
     e.locs.push(loc);
   };
-  for(const mn of MODES){
-    const m=S[mn];
-    for(const k in m.cells){
-      const [r,c]=k.split(',').map(Number);
-      add(m.cells[k],MODE_TAG[mn]+' '+coordLabel(r,c,mn));
+  PTS.forEach((pt,pi)=>{
+    const pre=PTS.length>1?`P${pi+1} `:'';
+    for(const mn of MODES){
+      const m=pt[mn];
+      for(const k in m.cells){
+        const [r,c]=k.split(',').map(Number);
+        add(m.cells[k],pre+MODE_TAG[mn]+' '+coordLabel(r,c,mn));
+      }
+      for(const p of m.bench)add(p,pre+MODE_TAG[mn]+' bench');
     }
-    for(const p of m.bench)add(p,MODE_TAG[mn]+' bench');
-  }
+  });
   return [...map.values()].sort((a,b)=>a.name.localeCompare(b.name));
 }
 
 function rosterApply(old,d){
   const lo=old.toLowerCase().trim();
-  for(const mn of MODES){
-    const m=S[mn];
+  for(const pt of PTS)for(const mn of MODES){
+    const m=pt[mn];
     for(const k in m.cells)
       if(m.cells[k].name.toLowerCase().trim()===lo)m.cells[k]={name:d.name,color:d.color};
     m.bench.forEach((p,i)=>{
@@ -935,16 +1039,16 @@ function rosterApply(old,d){
 
 function rosterRemove(old){
   const lo=old.toLowerCase().trim();
-  for(const mn of MODES){
-    const m=S[mn];
+  for(const pt of PTS)for(const mn of MODES){
+    const m=pt[mn];
     for(const k in m.cells)
       if(m.cells[k].name.toLowerCase().trim()===lo)delete m.cells[k];
-    m.bench=m.bench.filter(p=>p.name.toLowerCase().trim()!==lo);
+    pt[mn].bench=m.bench.filter(p=>p.name.toLowerCase().trim()!==lo);
   }
 }
 
 function rosterHas(name){
-  return MODES.some(mn=>pilotInMode(name,S[mn]));
+  return PTS.some(pt=>MODES.some(mn=>pilotInMode(name,pt[mn])));
 }
 
 function renderRosterList(){

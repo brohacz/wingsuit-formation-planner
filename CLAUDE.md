@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Purpose
 
-A browser-based planner for **wingsuit flying formations** — coordinated shapes flown by multiple wingsuit pilots. The user picks a layout (regular rows×columns grid, or a diamond that swells to a middle row and tapers back), clicks a slot to assign a pilot name and pick their suit color, and gets a visual map of who flies where. Each filled slot shows a small SVG wingsuit silhouette in the pilot's color with their name. Formations can be exported to JSON and re-imported, so a plan can be saved, shared with the group, or loaded back later.
+A browser-based planner for **wingsuit flying formations** — coordinated shapes flown by multiple wingsuit pilots. The user picks a layout (regular rows×columns grid, or a diamond that swells to a middle row and tapers back), clicks a slot to assign a pilot name and pick their suit color, and gets a visual map of who flies where. Each filled slot shows a small SVG wingsuit silhouette in the pilot's color with their name. A plan can hold multiple **points** — the sequence of formations flown on one dive — stepped through with a chip bar. Formations can be exported to JSON and re-imported, so a plan can be saved, shared with the group, or loaded back later.
 
 ## Project shape
 
@@ -24,11 +24,12 @@ The page is designed to be embedded in (or styled by) a host that provides these
 
 ## State and rendering
 
-Everything hangs off the module-scoped object `S` declared at `app.js:1`. Each of the three formation modes owns **everything separately** — dimensions, cells, and bench — so editing one doesn't disturb the others:
+A dive plan is an ordered list of **points** held in `PTS` (current index `PI`). The module-scoped `S` is always the **active point** (`S === PTS[PI]`) — every function below operates on `S`, so switching points just swaps `S` wholesale (`switchPoint`) and re-renders. Each point owns a name plus all three formation modes **separately** — dimensions, cells, and bench — so editing one mode doesn't disturb the others:
 
 ```js
-S = {
-  mode,                                                      // which mode is active
+S = PTS[PI] = {
+  name,                                                      // point name, e.g. "Exit wave"
+  mode,                                                      // which mode is active in this point
   regular:  { rows, cols, cells: {}, bench: [] },            // grid: rows × cols
   diamond:  { rows,        cells: {}, bench: [] },           // diamond: rows = widest (no cols)
   freeform: { rows, cols, cells: {}, bench: [] }             // freeform: half-step horizontal grid
@@ -36,6 +37,10 @@ S = {
 ```
 
 The list of mode names is `MODES = ['regular','diamond','freeform']` (`app.js:1`). The `rows`/`cols` inputs in the topbar read and write `cur().rows` / `cur().cols`; switching modes restores each mode's own dimensions. The cols input is hidden only in diamond mode (freeform uses both).
+
+### Points
+
+The points bar (`#points-bar`, rebuilt by `renderPoints()` inside `render()`) shows one chip per point plus actions for the active one: **+ Point** (`addPoint` — deep-clones the current point via `JSON.parse(JSON.stringify(...))` and inserts it after, so the next point starts as "same crew, same shape, now edit"), rename (`renamePoint`, a `prompt()`), reorder (`movePoint(±1)`, swaps and follows), and delete (`delPoint`, `confirm()`-guarded, disabled when only one point remains). Switching points clears `_selected` and re-syncs the mode segmented control via `syncModeButtons()` since each point remembers its own active mode. The readout shows the active point's name when the plan has more than one point.
 
 ### Freeform mode
 
@@ -45,7 +50,7 @@ All filled slots in every mode render at 70×80 (the wingsuit silhouette is 40 p
 
 Drag-and-drop in freeform doesn't use per-slot drop targets. Each slot is rendered with `noDropTarget=true`, and `attachFreeformSnap(canvas, ff, hsX, sY, cyOffset, hxMax)` wires `dragover` / `dragleave` / `drop` on the canvas itself. It converts the pointer's `clientX/Y` to the nearest snap key with `Math.round(x/hsX) - 1` (horizontal) and `Math.round((y - cyOffset)/sY)` (vertical), highlights that slot's `.drag-over` class on hover, and on drop hands off to the existing `dropOnSlot(src, k)`. Net effect: drop anywhere in the canvas and the pilot snaps to the closest center — whether that snap point was empty (move) or filled (swap).
 
-- `cur()` returns the active mode's `{rows, cols?, cells, bench}`; `others()` returns the other modes as an array (so propagation and bulk updates can iterate). **Never read `S.cells` / `S.bench` directly — always go through `cur()` / `others()`.**
+- `cur()` returns the active point's active mode `{rows, cols?, cells, bench}`. **Never read `S.cells` / `S.bench` directly — always go through `cur()`.** Plan-wide operations (roster, propagation) iterate `for(const pt of PTS) for(const mn of MODES) pt[mn]`.
 - `cells` is keyed by `"r,c"` strings produced by `key(r, c)` (`app.js:21`). `bench` is a flat array of `{name, color}` objects for pilots who are resting off the formation.
 - Anything that holds a pilot is addressed by a string key. Grid keys are `"r,c"`; bench keys are `"b:<index>"` produced by `bkey(i)` (`app.js:10`). Use the source-agnostic helpers `getPilot(k)`, `setPilot(k, d)`, `removePilot(k)` (`app.js:12`, `app.js:110`, `app.js:106`) — they read/write `cur()` and let drag-and-drop, the edit modal, and trash work uniformly.
 - `mode` is `"regular"` or `"diamond"`. In diamond mode the `cols` control is hidden and row widths are computed by `rowCount(total, r)` (`app.js:181`), which produces a symmetric 1, 2, …, mid+1, …, 2, 1 pattern. The diamond is laid out absolutely inside a sized wrapper so rows stay centered; the regular mode uses CSS grid. In diamond, `rows` means "widest" — the single integer that determines both the widest row and (implicitly via `2*rows-1`) the total row count.
@@ -54,18 +59,18 @@ Drag-and-drop in freeform doesn't use per-slot drop targets. Each slot is render
 
 ## Cross-mode propagation
 
-The three modes are otherwise isolated, with one exception: when a pilot is **created** (an empty slot is filled via the edit modal), they are also copied to the bench of every *other* mode so the same roster is available in all shapes. The propagation rules:
+Modes (and points) are otherwise isolated, with one exception: when a pilot is **created** (an empty slot is filled via the edit modal), they are also copied to the bench of every other mode **of every point** so the same roster is available in all shapes and all points. The propagation rules:
 
 - Trigger: `msav` handler, slot was empty (`getPilot(ekey)` returned undefined), name is non-empty, target is a slot (not the bench).
-- For each mode in `others()`: skipped if a pilot with the same case-insensitive trimmed name already exists in that mode (in either cells or bench) — see `pilotInMode(name, m)`.
+- For each `pt[mn]` over `PTS × MODES` except `cur()` itself: skipped if a pilot with the same case-insensitive trimmed name already exists in that mode (in either cells or bench) — see `pilotInMode(name, m)`.
 - Edits, drags, removes, and trash drops do *not* propagate. Mode-isolated state means each mode owns its own positions and color choices.
-- The "Clear" button clears only the current mode.
+- The "Clear" button clears only the current mode of the current point.
 
 ## Pilot roster
 
-The Roster button opens `modal-roster`, the one place where a pilot can be edited *across* all modes (per-slot edits stay mode-isolated; the roster exists to re-unify names/colors when they diverge). There is no separate roster data structure — `rosterList()` derives the roster from `S` on every open: the union of distinct pilots (case-insensitive trimmed name, first-seen color wins) over every mode's `cells` and `bench`, each with a list of location strings (`MODE_TAG[mode] + coordLabel(r, c, mode)` or `"<tag> bench"`).
+The Roster button opens `modal-roster`, the one place where a pilot can be edited *across* all modes and points (per-slot edits stay mode-isolated; the roster exists to re-unify names/colors when they diverge). There is no separate roster data structure — `rosterList()` derives the roster from the whole plan on every open: the union of distinct pilots (case-insensitive trimmed name, first-seen color wins) over every point's modes' `cells` and `bench`, each with a list of location strings (`MODE_TAG[mode] + coordLabel(r, c, mode)` or `"<tag> bench"`, prefixed with `P<n>` when the plan has more than one point).
 
-Row actions and the Add button reuse `modal-pilot` instead of duplicating the name/swatch UI. The module flag `rkey` switches the modal's semantics: `null` is the normal per-slot flow keyed by `ekey`; `{old: name}` means "edit this pilot everywhere" (save → `rosterApply` rewrites every matching cell/bench entry in all modes; Remove → `rosterRemove` deletes them all); `{add: true}` means "new roster pilot" (save → pushed onto **every** mode's bench). Saving with a name that already belongs to a different roster pilot is rejected with a toast (case-insensitive; renaming a pilot to a different casing of itself is allowed). Closing `modal-pilot` always clears `rkey` (in `hideModal`), and `openModal` resets it plus the modal title, so a roster edit can never leak into the next slot edit. Save/Cancel/Remove in roster context return to the reopened roster modal.
+Row actions and the Add button reuse `modal-pilot` instead of duplicating the name/swatch UI. The module flag `rkey` switches the modal's semantics: `null` is the normal per-slot flow keyed by `ekey`; `{old: name}` means "edit this pilot everywhere" (save → `rosterApply` rewrites every matching cell/bench entry in all points and modes; Remove → `rosterRemove` deletes them all); `{add: true}` means "new roster pilot" (save → pushed onto **every** point's **every** mode's bench). Saving with a name that already belongs to a different roster pilot is rejected with a toast (case-insensitive; renaming a pilot to a different casing of itself is allowed). Closing `modal-pilot` always clears `rkey` (in `hideModal`), and `openModal` resets it plus the modal title, so a roster edit can never leak into the next slot edit. Save/Cancel/Remove in roster context return to the reopened roster modal.
 
 ## Drag-and-drop
 
@@ -99,18 +104,19 @@ Dragging an unselected pilot clears the selection first (single-drag from then o
 
 ## Import / export
 
-`toJSON()` and `fromJSON()` define the persisted shape:
+`toJSON()` and `fromJSON()` define the persisted shape — a plan with one entry per point plus the active index:
 
 ```json
-{"mode":"regular","regular":{"rows":5,"cols":5,"cells":{...},"bench":[...]},"diamond":{"rows":3,"cells":{...},"bench":[...]},"freeform":{"rows":5,"cols":5,"cells":{...},"bench":[...]}}
+{"points":[{"name":"Point 1","mode":"regular","regular":{"rows":5,"cols":5,"cells":{...},"bench":[...]},"diamond":{"rows":3,"cells":{...},"bench":[...]},"freeform":{"rows":5,"cols":5,"cells":{...},"bench":[...]}}, ...],"cur":0}
 ```
 
-`fromJSON` coerces `mode` to one of the entries in `MODES`. Each mode's dimensions and `cells`/`bench` are sanitized via `normalizeMode(m, fallbackDims, withCols)`: `rows` (and `cols` if `withCols`) are clamped to 1–12 by `clampDim`, with `fallbackDims` providing a fallback when the per-mode field is missing. Bench entries without string `name` *and* `color` are dropped. **Imported JSON is the trust boundary**, so keep validation there if extending the schema.
+Each entry in `points` is sanitized by `parsePoint(d, defName)`: `mode` is coerced to one of `MODES`, `name` falls back to `"Point <n>"` and is trimmed to 24 chars, and each mode's dimensions and `cells`/`bench` go through `normalizeMode(m, fallbackDims, withCols)` — `rows` (and `cols` if `withCols`) clamped to 1–12 by `clampDim`, with `fallbackDims` covering a missing per-mode field. Bench entries without string `name` *and* `color` are dropped. `cur` is clamped to the points range. **Imported JSON is the trust boundary**, so keep validation there if extending the schema.
 
-Backward compat handles older formats via the same path:
+Backward compat handles older formats via the same path (`parsePoint` accepts every historical single-formation shape, and `fromJSON` wraps a non-`points` document as a one-point plan):
 1. Pre-per-mode-state legacy: top-level `{rows, cols, mode, cells, bench}`. The active mode gets the legacy data with its dimensions; the other modes get sensible defaults and every distinct pilot from the legacy data lands on each of their benches (deduped via `pilotInMode`).
 2. Per-mode-state without per-mode dimensions: each mode inherits the top-level `rows`/`cols` via `fallbackDims`, then takes over its own dimensions on next save.
 3. Per-mode-state without `freeform`: freeform initializes to an empty `{rows:5, cols:5, cells:{}, bench:[]}` on first load and starts being persisted on next save.
+4. Single-point (pre-`points`) format: top-level `{mode, regular, diamond, freeform}` becomes a one-point plan named "Point 1".
 
 ## Saving and sharing
 
@@ -128,4 +134,5 @@ Three persistence paths beyond export/import JSON, all reusing `toJSON()` / `fro
 - Keep identifiers short (the existing code uses `S`, `ws`, `ekey`, `cnt`, `sx`, `rW`, `cur`, etc.). Don't "modernize" them piecemeal.
 - After any state mutation, call `render()` rather than patching the DOM in place.
 - Address pilots through the `getPilot` / `setPilot` / `removePilot` helpers when the source could be either a slot or the bench. Only the helpers know the `"b:N"` vs `"r,c"` distinction.
-- Always read mode-scoped state through `cur()` / `other()`. Directly touching `S.regular` / `S.diamond` is fine when you genuinely need to reach into a specific mode (e.g., the new-pilot propagation does `other().bench.push(...)`), but avoid hard-coding `'regular'` / `'diamond'` strings in business logic — let `cur()` and `other()` flip with `S.mode`.
+- Always read mode-scoped state through `cur()`; for plan-wide work iterate `PTS × MODES`. Reaching into a specific mode of a specific point (`pt[mn]`) is fine when that's genuinely what you need, but avoid hard-coding `'regular'` / `'diamond'` strings in business logic — let `cur()` flip with `S.mode`.
+- `S` must always be `PTS[PI]` — never let them diverge. Anything that replaces the points array or index (point switch/delete, `fromJSON`) must reassign `S`, call `syncModeButtons()`, clear the selection, and `render()`.
