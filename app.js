@@ -29,9 +29,12 @@ function capturePilotRects(){
   return map;
 }
 
-function animatePointSwitch(prev){
+// `slow` switches to the playback profile: a long slow-motion flight with a
+// gentle in-out curve, instead of the snappy glide used while editing.
+function animatePointSwitch(prev,slow){
   if(_reduceMotion.matches)return;
-  const EASE='cubic-bezier(.2,.8,.2,1)';
+  const dur=slow?2800:340;
+  const ease=slow?'cubic-bezier(.45,0,.25,1)':'cubic-bezier(.2,.8,.2,1)';
   document.querySelectorAll('#fw .slot.filled, #bench-list .bench-item').forEach(el=>{
     const nm=el.querySelector('.slot-name');
     if(!nm)return;
@@ -44,18 +47,19 @@ function animatePointSwitch(prev){
       el.style.zIndex=10;
       el.animate(
         [{transform:`translate(${dx}px,${dy}px)`},{transform:'none'}],
-        {duration:340,easing:EASE}
+        {duration:dur,easing:ease}
       ).finished.then(()=>{el.style.zIndex='';}).catch(()=>{el.style.zIndex='';});
     } else {
       el.animate(
         [{opacity:0,transform:'scale(.85)'},{opacity:1,transform:'none'}],
-        {duration:260,delay:80,easing:EASE,fill:'backwards'}
+        {duration:Math.round(dur*.76),delay:Math.round(dur*.24),easing:ease,fill:'backwards'}
       );
     }
   });
 }
 
-function switchPoint(i){
+function switchPoint(i,fromPlay){
+  if(!fromPlay)stopPlay();
   if(i===PI||i<0||i>=PTS.length)return;
   const prev=capturePilotRects();
   PI=i;
@@ -63,7 +67,36 @@ function switchPoint(i){
   clearSelection();
   _suppressAnim=true;
   render();
-  animatePointSwitch(prev);
+  animatePointSwitch(prev,fromPlay);
+}
+
+// Dive playback: step through the points from the top in slow motion —
+// PLAY_MS per point, of which the first 2.8s is the flight. Any manual point
+// switch, edit-modal open, or drag stops the run.
+let PLAY_MS=4200;
+let _playT=null;
+
+function stopPlay(){
+  if(!_playT)return;
+  clearTimeout(_playT);
+  _playT=null;
+  renderPoints();
+}
+
+function startPlay(){
+  if(PTS.length<2)return;
+  const step=()=>{
+    if(PI>=PTS.length-1){
+      _playT=null;
+      renderPoints();
+      return;
+    }
+    switchPoint(PI+1,true);
+    _playT=setTimeout(step,PLAY_MS);
+  };
+  if(PI!==0)switchPoint(0,true);
+  _playT=setTimeout(step,PLAY_MS);
+  renderPoints();
 }
 
 function addPoint(){
@@ -159,6 +192,7 @@ function makeSlot(k,d,i,extra,compact){
 function attachDragSource(el,k){
   el.draggable=true;
   el.addEventListener('dragstart',e=>{
+    stopPlay();
     let multi=null;
     if(_selected.has(k)&&_selected.size>1){
       multi=computeMultiOffsets(k);
@@ -213,6 +247,7 @@ function touchStart(el,k,e){
 function touchLift(){
   const p=_touch.pending;
   if(!p||!document.contains(p.el))return;
+  stopPlay();
   const r=p.el.getBoundingClientRect();
   const g=p.el.cloneNode(true);
   g.classList.add('touch-ghost');
@@ -583,6 +618,10 @@ function renderPoints(){
     b.addEventListener('click',fn);
     acts.appendChild(b);
   };
+  mk(_playT?'&#9632; Stop':'&#9654; Play',
+    _playT?'Stop dive playback':'Play the dive from point 1',
+    ()=>{_playT?stopPlay():startPlay();},
+    PTS.length<2);
   mk('+ Point','Add point (copy of current)',addPoint);
   mk('&#9998;','Rename point',renamePoint);
   mk('&#9664;','Move point earlier',()=>movePoint(-1),PI===0);
@@ -676,6 +715,7 @@ function hideModal(id){
 }
 
 function openModal(k){
+  stopPlay();
   ekey=k;
   rkey=null;
   $('mp-title').textContent='Assign pilot';
@@ -805,6 +845,7 @@ function migratePoint(d,name){
 
 function fromJSON(str){
   const d=JSON.parse(str);
+  stopPlay();
   AF=!!d.autofit;
   $('af-chk').checked=AF;
   if(Array.isArray(d.points)){
@@ -1204,6 +1245,7 @@ $('btn-share').addEventListener('click',()=>{
 
 document.addEventListener('keydown',e=>{
   if(e.key!=='Escape')return;
+  stopPlay();
   let closedModal=false;
   ['modal-pilot','modal-export','modal-import','modal-saves','modal-roster'].forEach(id=>{
     if($(id).style.display==='flex'){hideModal(id);closedModal=true;}
