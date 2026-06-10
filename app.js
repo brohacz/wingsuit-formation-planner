@@ -10,12 +10,60 @@ let ekey=null,rkey=null,lastEdit=null,lastFocused=null,_suppressAnim=false,_drag
 let _selected=new Set();
 function cur(){return S;}
 
+// FLIP animation across points: pilots are matched by name (identity is
+// global), so on a point switch each pilot's card glides from its old
+// position to the new one. Cards that enter the formation (or cross between
+// bench and formation, where a glide would clip on container overflow) fade
+// and scale in instead. WAAPI ignores the CSS reduced-motion overrides, so
+// check the media query explicitly.
+const _reduceMotion=matchMedia('(prefers-reduced-motion: reduce)');
+
+function capturePilotRects(){
+  const map=new Map();
+  document.querySelectorAll('#fw .slot.filled, #bench-list .bench-item').forEach(el=>{
+    const nm=el.querySelector('.slot-name');
+    if(!nm)return;
+    const lo=nm.textContent.toLowerCase().trim();
+    if(lo)map.set(lo,{rect:el.getBoundingClientRect(),bench:el.classList.contains('bench-item')});
+  });
+  return map;
+}
+
+function animatePointSwitch(prev){
+  if(_reduceMotion.matches)return;
+  const EASE='cubic-bezier(.2,.8,.2,1)';
+  document.querySelectorAll('#fw .slot.filled, #bench-list .bench-item').forEach(el=>{
+    const nm=el.querySelector('.slot-name');
+    if(!nm)return;
+    const old=prev.get(nm.textContent.toLowerCase().trim());
+    const onBench=el.classList.contains('bench-item');
+    if(old&&old.bench===onBench){
+      const now=el.getBoundingClientRect();
+      const dx=old.rect.left-now.left,dy=old.rect.top-now.top;
+      if(!dx&&!dy)return;
+      el.style.zIndex=10;
+      el.animate(
+        [{transform:`translate(${dx}px,${dy}px)`},{transform:'none'}],
+        {duration:340,easing:EASE}
+      ).finished.then(()=>{el.style.zIndex='';}).catch(()=>{el.style.zIndex='';});
+    } else {
+      el.animate(
+        [{opacity:0,transform:'scale(.85)'},{opacity:1,transform:'none'}],
+        {duration:260,delay:80,easing:EASE,fill:'backwards'}
+      );
+    }
+  });
+}
+
 function switchPoint(i){
   if(i===PI||i<0||i>=PTS.length)return;
+  const prev=capturePilotRects();
   PI=i;
   S=PTS[i];
   clearSelection();
+  _suppressAnim=true;
   render();
+  animatePointSwitch(prev);
 }
 
 function addPoint(){
@@ -28,11 +76,14 @@ function addPoint(){
 function delPoint(){
   if(PTS.length<2)return;
   if(!confirm(`Delete "${S.name}" and its formation?`))return;
+  const prev=capturePilotRects();
   PTS.splice(PI,1);
   PI=Math.min(PI,PTS.length-1);
   S=PTS[PI];
   clearSelection();
+  _suppressAnim=true;
   render();
+  animatePointSwitch(prev);
 }
 
 function renamePoint(){

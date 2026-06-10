@@ -41,6 +41,8 @@ There is no manual canvas size. `fitGrid(pt)` (called at the top of every `rende
 
 The points bar (`#points-bar`, rebuilt by `renderPoints()` inside `render()`) shows one chip per point plus actions for the active one: **+ Point** (`addPoint` — deep-clones the current point via `JSON.parse(JSON.stringify(...))` and inserts it after, so the next point starts as "same crew, same shape, now edit"), rename (`renamePoint`, a `prompt()`), reorder (`movePoint(±1)`, swaps and follows), and delete (`delPoint`, `confirm()`-guarded, disabled when only one point remains). Switching points clears `_selected`.
 
+Point switches (and point deletes) play a **FLIP animation**: `switchPoint` captures every pilot card's `getBoundingClientRect()` keyed by lowercased name (`capturePilotRects` — identity is global, so names match across points), renders the new point with the stagger suppressed, then `animatePointSwitch` glides each card from its old rect to its new one via WAAPI (`el.animate`, 340 ms, z-index bumped for the flight and restored on `finished`). Pilots that enter the formation — or cross between bench and formation, where a glide would clip on container overflow — fade/scale in instead. Capturing rects mid-flight hands an interrupted glide off smoothly. WAAPI ignores the CSS reduced-motion overrides, so `_reduceMotion` (a `matchMedia` query) gates the whole thing.
+
 ### The half-step grid
 
 The canvas has `(2*cols - 1) * rows` snap positions — every row exposes both the integer half-step columns (square-aligned) and the offset half-step columns (diamond-aligned), so one formation can mix both alignments. Cell keys are `"r,hx"` where `hx` is the half-column index (0..2*cols-2).
