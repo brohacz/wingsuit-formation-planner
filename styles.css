@@ -332,18 +332,20 @@ input[type=text]:focus-visible,
 
 .slot.compact{padding:0;}
 .slot.compact .slot-cross{
-  width:22px;
-  height:22px;
+  width:16px;
+  height:16px;
   opacity:1;
   background:
-    linear-gradient(var(--color-border-secondary),var(--color-border-secondary)) no-repeat center / 22px 1.5px,
-    linear-gradient(var(--color-border-secondary),var(--color-border-secondary)) no-repeat center / 1.5px 22px;
+    linear-gradient(var(--color-border-secondary),var(--color-border-secondary)) no-repeat center / 16px 1px,
+    linear-gradient(var(--color-border-secondary),var(--color-border-secondary)) no-repeat center / 1px 16px;
 }
 .slot.compact:not(.filled):not(.drag-over){border-color:transparent;background:transparent;}
 .slot.compact:not(.filled):not(.drag-over):hover{border-color:var(--color-border-primary);background:var(--color-background-primary);}
-.slot.compact:not(.filled):not(.drag-over):hover .slot-cross{background:
-  linear-gradient(var(--color-border-primary),var(--color-border-primary)) no-repeat center / 22px 1.5px,
-  linear-gradient(var(--color-border-primary),var(--color-border-primary)) no-repeat center / 1.5px 22px;
+.slot.compact:not(.filled):not(.drag-over):hover .slot-cross{
+  opacity:1;
+  background:
+    linear-gradient(var(--color-border-primary),var(--color-border-primary)) no-repeat center / 16px 1.5px,
+    linear-gradient(var(--color-border-primary),var(--color-border-primary)) no-repeat center / 1.5px 16px;
 }
 
 .ff-canvas{position:relative;}
