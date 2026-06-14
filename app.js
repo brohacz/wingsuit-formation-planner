@@ -185,11 +185,18 @@ const $=id=>document.getElementById(id);
 function key(r,c){return r+','+c;}
 function esc(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
 
+// Pilot colors arrive from imported/shared JSON (an untrusted boundary) and are
+// interpolated into SVG/style attributes, so only accept safe CSS color forms
+// (hex, named, rgb/hsl) — none of which contain the "<> chars used for HTML
+// injection. Anything else falls back to the default suit color.
+const SAFE_COLOR=/^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$|^[a-z]+$|^(?:rgb|rgba|hsl|hsla)\([0-9.,%\s/]*\)$/i;
+function safeColor(c){return (typeof c==='string'&&SAFE_COLOR.test(c.trim()))?c.trim():'#1d9e75';}
+
 function ws(color,sz){
   const s=sz||56,c=color||'#1d9e75';
   return `<svg width="${s}" height="${s}" viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
     <g transform="translate(28,28)">
-      <path d="M-3.5,-15 Q-12,-15 -22,-12 L-14,8 L-14,22 L14,22 L14,8 L22,-12 Q12,-15 3.5,-15 Z" fill="${c}" opacity=".88"/>
+      <path d="M-3.5,-15 Q-12,-15 -22,-12 L-14,8 L-14,22 L14,22 L14,8 L22,-12 Q12,-15 3.5,-15 Z" fill="${esc(c)}" opacity=".88"/>
       <path d="M-3.5,-14 L3.5,-14 L4.8,-2 L-4.8,-2 Z" fill="#14161d"/>
       <ellipse cx="-20" cy="-11" rx="1.6" ry="1.2" fill="#2a2f38"/>
       <ellipse cx="20" cy="-11" rx="1.6" ry="1.2" fill="#2a2f38"/>
@@ -795,7 +802,7 @@ function prevUpdate(){
   $('ws-prev').innerHTML=ws(c,80);
   const np=$('ws-nameplate');
   np.classList.toggle('empty',!n);
-  np.innerHTML=`<span style="border-bottom-color:${n?c:'var(--color-border-tertiary)'}">${esc(n||'Pilot name')}</span>`;
+  np.innerHTML=`<span style="border-bottom-color:${n?esc(c):'var(--color-border-tertiary)'}">${esc(n||'Pilot name')}</span>`;
 }
 
 function toast(msg){
@@ -828,13 +835,13 @@ function normalizeForm(m,fallbackDims,withCols){
       const mm=/^(\d{1,2}),(\d{1,3})$/.exec(k);
       if(!mm||+mm[1]>60||+mm[2]>120)continue;
       if(!v||typeof v.name!=='string'||typeof v.color!=='string')continue;
-      cells[k]=v;
+      cells[k]={name:v.name,color:safeColor(v.color)};
     }
   }
   const out={
     rows:clampDim(m.rows,fallbackDims&&fallbackDims.rows),
     cells,
-    bench:Array.isArray(m.bench)?m.bench.filter(p=>p&&typeof p.name==='string'&&typeof p.color==='string'):[]
+    bench:Array.isArray(m.bench)?m.bench.filter(p=>p&&typeof p.name==='string'&&typeof p.color==='string').map(p=>({name:p.name,color:safeColor(p.color)})):[]
   };
   if(withCols)out.cols=clampDim(m.cols,fallbackDims&&fallbackDims.cols);
   return out;
@@ -1252,6 +1259,8 @@ function applyHashIfAny(){
   if(!m)return false;
   try{
     fromJSON(b64decode(m[1]));
+    // consume the hash so later edits (now in autosave) survive a reload
+    history.replaceState(null,'',location.pathname+location.search);
     toast('Loaded shared formation');
     return true;
   }catch(e){

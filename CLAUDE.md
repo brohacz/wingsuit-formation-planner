@@ -59,7 +59,7 @@ Drag-and-drop doesn't use per-slot drop targets. `attachFreeformSnap(canvas, ff,
 - `cells` is keyed by `"r,hx"` strings produced by `key(r, c)`. `bench` is a flat array of `{name, color}` objects for pilots who are resting off the formation.
 - Anything that holds a pilot is addressed by a string key. Grid keys are `"r,hx"`; bench keys are `"b:<index>"` produced by `bkey(i)`. Use the source-agnostic helpers `getPilot(k)`, `setPilot(k, d)`, `removePilot(k)` — they read/write `cur()` and let drag-and-drop, the edit modal, and trash work uniformly.
 - `render()` is the single source of truth for the DOM — every mutation calls it. There is no virtual DOM or diffing; the canvas, points bar, and bench are rebuilt on each render (`renderPoints()`, `renderBench()`).
-- `slotHTML()` returns a `.slot` button's markup and inlines the `ws()` SVG for the wingsuit silhouette. Color comes from the cell, size from a parameter; all dynamic values are `esc()`d.
+- `slotHTML()` returns a `.slot` button's markup and inlines the `ws()` SVG for the wingsuit silhouette. Color comes from the cell, size from a parameter; all dynamic values interpolated into markup are `esc()`d (including the color in `ws()`'s `fill` and the modal nameplate style — colors come from untrusted imports/share links).
 
 ## Undo / redo
 
@@ -118,7 +118,7 @@ Dragging an unselected pilot clears the selection first (single-drag from then o
 {"points":[{"name":"Point 1","cells":{"1,2":{"name":"Anna","color":"#1d9e75"}},"bench":[...]}, ...],"cur":0,"autofit":false}
 ```
 
-Each entry in `points` is sanitized by `parsePoint(d, defName)`: `name` falls back to `"Point <n>"` and is trimmed to 24 chars, `cells`/`bench` go through `normalizeForm` (cell keys must be `r,hx` integer pairs within sane bounds and values must carry string `name`+`color`; bench entries without string `name` *and* `color` are dropped), and `fitGrid` derives the dimensions — old exports carrying `rows`/`cols` simply have them ignored. `cur` is clamped to the points range. **Imported JSON is the trust boundary**, so keep validation there if extending the schema.
+Each entry in `points` is sanitized by `parsePoint(d, defName)`: `name` falls back to `"Point <n>"` and is trimmed to 24 chars, `cells`/`bench` go through `normalizeForm` (cell keys must be `r,hx` integer pairs within sane bounds and values must carry string `name`+`color`; bench entries without string `name` *and* `color` are dropped; colors are passed through `safeColor()`, which keeps only safe CSS color forms and falls back to the default suit color otherwise), and `fitGrid` derives the dimensions — old exports carrying `rows`/`cols` simply have them ignored. `cur` is clamped to the points range. **Imported JSON is the trust boundary**, so keep validation there if extending the schema.
 
 Backward compat: a document (or point entry) carrying a `mode` string is a retired multi-mode/legacy format and goes through `migratePoint(d, name)`, which maps the old shapes onto the half-step grid — regular `(r,c)` → `(r, 2c)`; a diamond of widest `w` centers row `r` (width `cnt`) at `hx=(w-1)-(cnt-1)+2c`; a freeform sub-state carries over verbatim. The point's saved active mode decides which layout's positions survive (when it actually has pilots placed; otherwise freeform's), and every pilot from the other modes' cells and benches lands on the bench (deduped via `pilotInPoint`) so nobody is lost. `fromJSON` wraps any non-`points` document as a one-point plan, which also covers the oldest top-level `{rows, cols, mode, cells, bench}` format.
 
@@ -128,9 +128,9 @@ Three persistence paths beyond export/import JSON, all reusing `toJSON()` / `fro
 
 - **Autosave** — `localStorage` under `wfp:autosave`, a single `toJSON()` string. `autosave()` is called at the end of every `render()`, so any state change (assign, drag, mode switch, clear, etc.) is captured. On page load, `loadAutosave()` restores it. The autosave is overwritten by any subsequent render, so it always reflects the last in-page state.
 - **Named local saves** — `localStorage` under `wfp:saves`, a map of `{<name>: <toJSON-string>}`. The Saved modal lets the user save the current formation under a name, then load or delete any entry. `getSaves` / `setSaves` are the only readers/writers; `renderSavesList()` rebuilds the modal contents. Saving with an existing name silently overwrites.
-- **Share-link URL hash** — `shareURL()` builds `<current-url>#f=<base64url-of-toJSON>` and copies it to the clipboard. `applyHashIfAny()` decodes the hash and feeds it to `fromJSON()`. Base64 is URL-safe (`+/=` rewritten to `-_` with stripped padding) and Unicode-safe via `TextEncoder` / `TextDecoder`. No compression — typical exports fit in URL limits.
+- **Share-link URL hash** — `shareURL()` builds `<current-url>#f=<base64url-of-toJSON>` and copies it to the clipboard. `applyHashIfAny()` decodes the hash and feeds it to `fromJSON()`. Base64 is URL-safe (`+/=` rewritten to `-_` with stripped padding) and Unicode-safe via `TextEncoder` / `TextDecoder`. No compression — typical exports fit in URL limits. After a successful load the hash is **consumed** (`history.replaceState` drops it) so the shared plan immediately becomes the autosave and any later edits survive a reload.
 
-**Page-load order** (at the bottom of `app.js`): URL hash wins → autosave → default empty state. So a share link always loads the shared formation (even on returning users), and a regular reload picks up where the user left off.
+**Page-load order** (at the bottom of `app.js`): URL hash (loaded once, then cleared) → autosave → default empty state. So a share link loads the shared formation on first open; from then on (including reloads) the user's autosave — which now reflects their edits to that plan — takes over.
 
 ## Conventions to preserve
 
