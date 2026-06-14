@@ -233,7 +233,7 @@ const ICON = `
 <svg viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">
   <g transform="translate(28,28)">
     <path d="M-3.5,-15 Q-12,-15 -22,-12 L-14,8 L-14,22 L14,22 L14,8 L22,-12 Q12,-15 3.5,-15 Z" fill="#2b4fd8"/>
-    <path d="M-3.5,-15 L3.5,-15 L5.5,8 L-5.5,8 Z" fill="#3a5cf0"/>
+    <path d="M-3.5,-14 L3.5,-14 L4.8,-2 L-4.8,-2 Z" fill="#39404f"/>
     <ellipse cx="-20" cy="-11" rx="1.6" ry="1.2" fill="#2a2f38"/>
     <ellipse cx="20" cy="-11" rx="1.6" ry="1.2" fill="#2a2f38"/>
     <ellipse cx="-13" cy="21" rx="1.6" ry="1.2" fill="#2a2f38"/>
@@ -249,27 +249,30 @@ const iconParts = new THREE.Group();   // built in raw SVG units, recentred belo
 
 const svg = new SVGLoader().parse(ICON);
 svg.paths.forEach((path, pi) => {
+  // path 0 is the wing body; path 1 (the centre panel) becomes a packed
+  // parachute container — thick and puffy; the rest (vents, head) stay thin
+  const isRig = pi === 1;
+  const detail = pi > 0;
   const mat = new THREE.MeshStandardMaterial({
     color: path.color,
-    roughness: 0.42,
-    metalness: 0.12,
+    roughness: isRig ? 0.62 : 0.42,
+    metalness: isRig ? 0.06 : 0.12,
     side: THREE.DoubleSide,
   });
-  // the first path is the wing body; the rest (zip, vents, head) are details
-  // that ride a hair proud of the front face so they never z-fight with it
-  const detail = pi > 0;
   SVGLoader.createShapes(path).forEach(shape => {
+    const depth = isRig ? 2.6 : DEPTH;
     const geo = new THREE.ExtrudeGeometry(shape, {
-      depth: DEPTH,
+      depth,
       bevelEnabled: true,
-      bevelThickness: 0.45,
-      bevelSize: 0.35,
-      bevelSegments: 3,
+      bevelThickness: isRig ? 0.9 : 0.45,   // softly rounded, low-profile
+      bevelSize:      isRig ? 0.7 : 0.35,
+      bevelSegments:  isRig ? 5 : 3,
       curveSegments: 28,
     });
-    geo.translate(0, 0, -DEPTH / 2);          // centre the slab on z = 0
+    geo.translate(0, 0, -depth / 2);          // centre the slab on z = 0
     const mesh = new THREE.Mesh(geo, mat);
-    if (detail) mesh.position.z = 0.25;   // nudge proud of the body's front face
+    if (isRig) mesh.position.z = DEPTH / 2 + 0.2;   // sits low on the back
+    else if (detail) mesh.position.z = 0.25;        // proud of the front face
     iconParts.add(mesh);
   });
 });
