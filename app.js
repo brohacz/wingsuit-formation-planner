@@ -190,12 +190,12 @@ function ws(color,sz){
   return `<svg width="${s}" height="${s}" viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
     <g transform="translate(28,28)">
       <path d="M-3.5,-15 Q-12,-15 -22,-12 L-14,8 L-14,22 L14,22 L14,8 L22,-12 Q12,-15 3.5,-15 Z" fill="${c}" opacity=".88"/>
-      <path d="M-3.5,-15 L3.5,-15 L5.5,8 L-5.5,8 Z" fill="${c}"/>
+      <path d="M-3.5,-14 L3.5,-14 L4.8,-2 L-4.8,-2 Z" fill="#14161d"/>
       <ellipse cx="-20" cy="-11" rx="1.6" ry="1.2" fill="#2a2f38"/>
       <ellipse cx="20" cy="-11" rx="1.6" ry="1.2" fill="#2a2f38"/>
       <ellipse cx="-13" cy="21" rx="1.6" ry="1.2" fill="#2a2f38"/>
       <ellipse cx="13" cy="21" rx="1.6" ry="1.2" fill="#2a2f38"/>
-      <circle cx="0" cy="-19" r="3" fill="#2a2f38"/>
+      <circle cx="0" cy="-19" r="3" fill="var(--color-text-primary,#2a2f38)"/>
       <ellipse cx="0" cy="-20" rx="1.6" ry=".7" fill="#fff" opacity=".4"/>
     </g>
   </svg>`;
