@@ -32,9 +32,28 @@ const ICON = `<svg viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg"><g tra
 const PX = 40 / 56;   // viewBox unit -> px; reproduces the old 40px slot icon
 const DB = 3;         // body slab thickness, in icon units (toward the camera)
 
-// materials: rig + dark are shared; body is cached per suit colour
+// materials: rig + vents are shared; body is cached per suit colour; the head
+// gets its own material so it can flip light/dark with the page theme (it pokes
+// above the body into empty space, so it must contrast the background)
 const rigMat  = new THREE.MeshStandardMaterial({ color: 0x39404f, roughness: 0.62, metalness: 0.06, side: THREE.DoubleSide });
 const darkMat = new THREE.MeshStandardMaterial({ color: 0x2a2f38, roughness: 0.5, side: THREE.DoubleSide });
+const headMat = new THREE.MeshStandardMaterial({ color: 0x2a2f38, roughness: 0.5, side: THREE.DoubleSide });
+const HEAD_ON_LIGHT = 0x2a2f38, HEAD_ON_DARK = 0xe8ecf7;
+
+// is the page on a dark theme? prefer the host's rendered background colour
+// (theme tokens), falling back to the OS colour-scheme preference
+function pageIsDark(){
+  const probe = el => {
+    const m = getComputedStyle(el).backgroundColor.match(/rgba?\(([^)]+)\)/);
+    if (!m) return null;
+    const [r, g, b, a = 1] = m[1].split(',').map(parseFloat);
+    if (a === 0) return null;                      // transparent — keep probing
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b < 128;
+  };
+  const v = probe(document.body) ?? probe(document.documentElement);
+  return v ?? matchMedia('(prefers-color-scheme: dark)').matches;
+}
+function applyTheme(){ headMat.color.set(pageIsDark() ? HEAD_ON_DARK : HEAD_ON_LIGHT); }
 const bodyMats = new Map();
 function bodyMat(color){
   let m = bodyMats.get(color);
@@ -63,7 +82,9 @@ function buildTemplate(){
         curveSegments: 18,
       });
       geo.translate(-28, -28, -depth / 2);   // viewBox centre -> origin; slab centred on z=0
-      const mesh = new THREE.Mesh(geo, isBody ? bodyMat('#2b4fd8') : (isRig ? rigMat : darkMat));
+      const isHead = pi === 6;               // the circle; vents (2..5) stay darkMat
+      const mat = isBody ? bodyMat('#2b4fd8') : isRig ? rigMat : isHead ? headMat : darkMat;
+      const mesh = new THREE.Mesh(geo, mat);
       if (isBody) mesh.name = 'body';
       else if (isRig) mesh.position.z = DB / 2 + 0.2;   // bulge off the back (toward camera)
       else mesh.position.z = 0.25;                      // vents/head sit just proud
@@ -96,6 +117,14 @@ function init(){
   pilotGroup = new THREE.Group();
   scene.add(pilotGroup);
   tmpl = buildTemplate();
+  applyTheme();
+
+  // repaint the head when the OS colour-scheme flips (host class-based theme
+  // toggles repaint on the next render() anyway, via applyTheme() in sync)
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    applyTheme();
+    if (renderer) renderer.render(scene, camera);
+  });
 }
 
 function resize(W, H){
@@ -111,6 +140,7 @@ function sync(wrap, pilots, W, H){
   if (!renderer) init();
   if (renderer.domElement.parentNode !== wrap) wrap.appendChild(renderer.domElement);  // wrap is rebuilt each render
   resize(W, H);
+  applyTheme();   // pick up host theme changes on every render
 
   const sig = W + 'x' + H + '|' + pilots.map(p => p.x + ',' + p.y + ',' + p.color).join(';');
   if (sig !== lastSig){
