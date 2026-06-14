@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wingsuit Pilot — 3D Model</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@300;700;900&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#070b1e;
+    --paper:#e8ecf7;
+    --dim:rgba(232,236,247,.55);
+    --faint:rgba(232,236,247,.22);
+    --accent:#f2c63d;
+    --suit:#2b4fd8;
+    --mono:'IBM Plex Mono',monospace;
+    --display:'Unbounded',sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%;overflow:hidden}
+  body{
+    background:var(--ink);
+    color:var(--paper);
+    font-family:var(--mono);
+    -webkit-font-smoothing:antialiased;
+  }
+  #stage{position:fixed;inset:0;display:block;cursor:grab}
+  #stage:active{cursor:grabbing}
+
+  /* film-grain wash over the whole scene */
+  .grain{
+    position:fixed;inset:-50%;pointer-events:none;z-index:5;opacity:.07;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+    animation:grain 1.2s steps(4) infinite;
+  }
+  @keyframes grain{
+    0%{transform:translate(0,0)}25%{transform:translate(-2%,1%)}
+    50%{transform:translate(1%,-2%)}75%{transform:translate(-1%,2%)}100%{transform:translate(2%,1%)}
+  }
+
+  /* corner frame */
+  .frame{position:fixed;inset:18px;pointer-events:none;z-index:4}
+  .frame i{position:absolute;width:26px;height:26px;border:1px solid var(--faint)}
+  .frame i:nth-child(1){top:0;left:0;border-right:0;border-bottom:0}
+  .frame i:nth-child(2){top:0;right:0;border-left:0;border-bottom:0}
+  .frame i:nth-child(3){bottom:0;left:0;border-right:0;border-top:0}
+  .frame i:nth-child(4){bottom:0;right:0;border-left:0;border-top:0}
+
+  .hud{position:fixed;z-index:6;pointer-events:none}
+
+  .masthead{top:42px;left:46px;max-width:46vw}
+  .masthead .eyebrow{
+    font-size:11px;letter-spacing:.42em;text-transform:uppercase;color:var(--accent);
+    margin-bottom:14px;
+  }
+  .masthead h1{
+    font-family:var(--display);font-weight:900;line-height:.92;
+    font-size:clamp(34px,5.2vw,72px);letter-spacing:-.01em;text-transform:uppercase;
+  }
+  .masthead h1 span{display:block;font-weight:300;color:var(--dim)}
+  .masthead .sub{margin-top:16px;font-size:12px;color:var(--dim);letter-spacing:.08em}
+
+  .telemetry{bottom:46px;left:46px;font-size:12px;letter-spacing:.06em}
+  .telemetry .row{display:flex;gap:14px;align-items:baseline;margin-top:7px}
+  .telemetry .k{color:var(--faint);width:5.5ch}
+  .telemetry .v{color:var(--paper);font-weight:500;min-width:9ch}
+  .telemetry .u{color:var(--dim);font-size:10px}
+  .telemetry .bar{
+    width:148px;height:1px;background:var(--faint);margin-bottom:10px;position:relative;
+  }
+  .telemetry .bar::after{
+    content:"";position:absolute;left:0;top:-1px;height:3px;width:38%;background:var(--accent);
+  }
+
+  .spec{bottom:46px;right:46px;text-align:right;font-size:11px;line-height:1.9;color:var(--dim);letter-spacing:.08em}
+  .spec b{color:var(--paper);font-weight:500}
+  .spec .tag{color:var(--accent)}
+
+  .hint{
+    bottom:18px;left:50%;transform:translateX(-50%);
+    font-size:10px;letter-spacing:.3em;text-transform:uppercase;color:var(--faint);
+    white-space:nowrap;
+  }
+
+  #boot{
+    position:fixed;inset:0;z-index:7;display:grid;place-items:center;
+    background:var(--ink);transition:opacity .8s ease;font-size:11px;
+    letter-spacing:.4em;text-transform:uppercase;color:var(--dim);
+  }
+  #boot.gone{opacity:0;pointer-events:none}
+
+  /* staggered reveal */
+  .hud{opacity:0;animation:rise 1.1s cubic-bezier(.2,.7,.2,1) forwards}
+  .masthead{animation-delay:.25s}
+  .telemetry{animation-delay:.5s}
+  .spec{animation-delay:.65s}
+  .hint{animation-delay:.9s}
+  @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  .hint{animation-name:fadein}
+  @keyframes fadein{from{opacity:0}to{opacity:1}}
+
+  @media (prefers-reduced-motion:reduce){
+    .grain{animation:none}
+    .hud{animation:none;opacity:1}
+  }
+  @media (max-width:640px){
+    .masthead{top:30px;left:24px;max-width:80vw}
+    .telemetry{left:24px;bottom:96px}
+    .spec{right:24px;bottom:30px}
+    .frame{inset:10px}
+  }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+
+<canvas id="stage"></canvas>
+
+<div class="grain"></div>
+<div class="frame"><i></i><i></i><i></i><i></i></div>
+
+<header class="hud masthead">
+  <div class="eyebrow">Flight Model · 01</div>
+  <h1>Wingsuit<span>solo pilot</span></h1>
+  <div class="sub">planner icon — thin extruded silhouette, flying flat</div>
+</header>
+
+<div class="hud telemetry">
+  <div class="bar"></div>
+  <div class="row"><span class="k">ALT</span><span class="v" id="t-alt">3 950</span><span class="u">M AGL</span></div>
+  <div class="row"><span class="k">IAS</span><span class="v" id="t-ias">164</span><span class="u">KM/H</span></div>
+  <div class="row"><span class="k">GLIDE</span><span class="v" id="t-gld">2.6 : 1</span><span class="u">RATIO</span></div>
+</div>
+
+<div class="hud spec">
+  <div><span class="tag">▲</span> attitude <b>−7° pitch</b></div>
+  <div>span <b>1.9 m</b> · wetted area <b>2.4 m²</b></div>
+  <div>render <b>three.js</b> · geometry <b>extruded SVG icon</b></div>
+</div>
+
+<div class="hud hint">drag to orbit &nbsp;·&nbsp; scroll to zoom &nbsp;·&nbsp; auto-rotating</div>
+
+<div id="boot">acquiring pilot…</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { SVGLoader } from 'three/addons/loaders/SVGLoader.js';
+
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------- renderer / scene / camera ---------- */
+const canvas = document.getElementById('stage');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0x1b2342, 16, 46);
+
+const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.1, 120);
+camera.position.set(2.7, 1.7, -3.4);  // start on the pilot's front-right quarter
+
+const controls = new OrbitControls(camera, canvas);
+controls.target.set(0, 0, -0.1);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.minDistance = 1.8;
+controls.maxDistance = 14;
+controls.autoRotate = !reduceMotion;
+controls.autoRotateSpeed = 0.9;
+
+/* ---------- twilight sky dome ---------- */
+const sky = new THREE.Mesh(
+  new THREE.SphereGeometry(55, 32, 18),
+  new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    depthWrite: false,
+    uniforms: {
+      top:     { value: new THREE.Color(0x070b1e) },
+      horizon: { value: new THREE.Color(0xe08a4e) },
+      haze:    { value: new THREE.Color(0x4a4376) },
+      below:   { value: new THREE.Color(0x121a33) },
+    },
+    vertexShader: `
+      varying vec3 vP;
+      void main(){ vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+    fragmentShader: `
+      uniform vec3 top, horizon, haze, below;
+      varying vec3 vP;
+      void main(){
+        float h = normalize(vP).y;
+        vec3 c;
+        if (h > 0.0) {
+          vec3 lower = mix(horizon, haze, smoothstep(0.0, 0.18, h));
+          c = mix(lower, top, smoothstep(0.04, 0.55, h));
+        } else {
+          c = mix(horizon * 0.8, below, smoothstep(0.0, 0.25, -h));
+        }
+        gl_FragColor = vec4(c, 1.0);
+      }`,
+  })
+);
+scene.add(sky);
+
+/* ---------- lights ---------- */
+scene.add(new THREE.HemisphereLight(0x9db8ff, 0x46315a, 0.85));
+const sun = new THREE.DirectionalLight(0xffd9a8, 2.0);
+sun.position.set(-4, 5, 4);
+scene.add(sun);
+const rim = new THREE.DirectionalLight(0x7fa8ff, 0.9);
+rim.position.set(3, -1.5, -5);
+scene.add(rim);
+
+/* ---------- pilot ---------- */
+/* The exact wingsuit silhouette from the planner's ws() icon, taken as-is and
+   given depth: each SVG fill becomes a flat shape extruded into a slab with a
+   small bevelled edge. Same paths, same colours — just made a little thick. */
+
+// the icon markup, lifted verbatim from app.js ws() (translate(28,28) origin,
+// SVG y-down). Colours are flattened to solid fills (the source uses opacity).
+const ICON = `
+<svg viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">
+  <g transform="translate(28,28)">
+    <path d="M-3.5,-15 Q-12,-15 -22,-12 L-14,8 L-14,22 L14,22 L14,8 L22,-12 Q12,-15 3.5,-15 Z" fill="#2b4fd8"/>
+    <path d="M-3.5,-15 L3.5,-15 L5.5,8 L-5.5,8 Z" fill="#3a5cf0"/>
+    <ellipse cx="-20" cy="-11" rx="1.6" ry="1.2" fill="#2a2f38"/>
+    <ellipse cx="20" cy="-11" rx="1.6" ry="1.2" fill="#2a2f38"/>
+    <ellipse cx="-13" cy="21" rx="1.6" ry="1.2" fill="#2a2f38"/>
+    <ellipse cx="13" cy="21" rx="1.6" ry="1.2" fill="#2a2f38"/>
+    <circle cx="0" cy="-19" r="3" fill="#2a2f38"/>
+  </g>
+</svg>`;
+
+const DEPTH = 3;   // extrusion thickness in icon units — a thin slab
+
+const pilot = new THREE.Group();
+const iconParts = new THREE.Group();   // built in raw SVG units, recentred below
+
+const svg = new SVGLoader().parse(ICON);
+svg.paths.forEach((path, pi) => {
+  const mat = new THREE.MeshStandardMaterial({
+    color: path.color,
+    roughness: 0.42,
+    metalness: 0.12,
+    side: THREE.DoubleSide,
+  });
+  // the first path is the wing body; the rest (zip, vents, head) are details
+  // that ride a hair proud of the front face so they never z-fight with it
+  const detail = pi > 0;
+  SVGLoader.createShapes(path).forEach(shape => {
+    const geo = new THREE.ExtrudeGeometry(shape, {
+      depth: DEPTH,
+      bevelEnabled: true,
+      bevelThickness: 0.45,
+      bevelSize: 0.35,
+      bevelSegments: 3,
+      curveSegments: 28,
+    });
+    geo.translate(0, 0, -DEPTH / 2);          // centre the slab on z = 0
+    const mesh = new THREE.Mesh(geo, mat);
+    if (detail) mesh.position.z = 0.25;   // nudge proud of the body's front face
+    iconParts.add(mesh);
+  });
+});
+
+// SVG y points down — flip it so the pilot reads head-up
+iconParts.scale.y = -1;
+
+// recentre on the icon's bounding box and scale it into the scene
+const box = new THREE.Box3().setFromObject(iconParts);
+const ctr = box.getCenter(new THREE.Vector3());
+const size = box.getSize(new THREE.Vector3());
+iconParts.position.sub(ctr);                  // origin at the icon's centre
+
+const SCALE = 3.2 / size.x;                   // ~3.2 world units across the span
+pilot.scale.setScalar(SCALE);
+pilot.add(iconParts);
+
+// lay the silhouette flat — flying belly-to-earth, head toward the camera,
+// detailed face up — so the orbiting view reads like a formation seen from above
+const PITCH = -Math.PI / 2 - 0.06;   // flat, with a whisper of nose-down dive
+pilot.rotation.x = PITCH;
+scene.add(pilot);
+
+/* ---------- cloud deck far below ---------- */
+function cloudTexture(){
+  const c = document.createElement('canvas');
+  c.width = c.height = 512;
+  const x = c.getContext('2d');
+  for (let i = 0; i < 52; i++){
+    const r = 26 + Math.random() * 78;
+    const px = Math.random() * 512, py = Math.random() * 512;
+    const g = x.createRadialGradient(px, py, 0, px, py, r);
+    g.addColorStop(0, 'rgba(255,255,255,.8)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    x.fillStyle = g;
+    x.beginPath(); x.arc(px, py, r, 0, 7); x.fill();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+}
+const cloudTex = cloudTexture();
+function cloudDeck(size, y, opacity, repeat){
+  const tex = cloudTex.clone();
+  tex.repeat.set(repeat, repeat);
+  const m = new THREE.Mesh(
+    new THREE.PlaneGeometry(size, size),
+    new THREE.MeshBasicMaterial({
+      map: tex, transparent: true, opacity,
+      color: 0xb9c4e6, depthWrite: false,
+    })
+  );
+  m.rotation.x = -Math.PI / 2;
+  m.position.y = y;
+  scene.add(m);
+  return tex;
+}
+const deckA = cloudDeck(90, -7,  0.5, 2);
+const deckB = cloudDeck(120, -12, 0.35, 3);
+
+/* ---------- wind streaks ---------- */
+const N = 70, LEN = 0.9, RANGE = 14;
+const streakPos = new Float32Array(N * 6);
+const streakVel = new Float32Array(N);
+function seedStreak(i, scatterZ){
+  streakPos[i*6]     = streakPos[i*6+3] = (Math.random() - 0.5) * 10;
+  streakPos[i*6+1]   = streakPos[i*6+4] = (Math.random() - 0.5) * 6;
+  const z = scatterZ ? (Math.random() - 0.5) * 2 * RANGE : -RANGE;
+  streakPos[i*6+2] = z;
+  streakPos[i*6+5] = z + LEN;
+  streakVel[i] = 7 + Math.random() * 7;
+}
+for (let i = 0; i < N; i++) seedStreak(i, true);
+const streakGeo = new THREE.BufferGeometry();
+streakGeo.setAttribute('position', new THREE.BufferAttribute(streakPos, 3));
+const streaks = new THREE.LineSegments(
+  streakGeo,
+  new THREE.LineBasicMaterial({
+    color: 0xaec3ff, transparent: true, opacity: 0.28,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  })
+);
+scene.add(streaks);
+
+/* ---------- telemetry ---------- */
+let alt = 3950;
+const $alt = document.getElementById('t-alt');
+const $ias = document.getElementById('t-ias');
+const $gld = document.getElementById('t-gld');
+let lastHud = 0;
+function hud(t){
+  if (t - lastHud < 140) return;
+  lastHud = t;
+  alt = alt > 900 ? alt - 0.62 - Math.random() * 0.3 : 3950;
+  $alt.textContent = Math.round(alt).toLocaleString('en').replace(/,/g, ' ');
+  $ias.textContent = Math.round(163 + Math.sin(t / 900) * 4 + Math.random() * 2);
+  $gld.textContent = (2.5 + Math.sin(t / 1400) * 0.2).toFixed(1) + ' : 1';
+}
+
+/* ---------- loop ---------- */
+const clock = new THREE.Clock();
+renderer.setAnimationLoop(() => {
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t = clock.elapsedTime;
+
+  if (!reduceMotion){
+    pilot.position.y = Math.sin(t * 1.25) * 0.05;
+    pilot.rotation.z = Math.sin(t * 0.8) * 0.035;
+    pilot.rotation.x = PITCH + Math.sin(t * 1.6) * 0.012;
+
+    for (let i = 0; i < N; i++){
+      streakPos[i*6+2] += streakVel[i] * dt;
+      streakPos[i*6+5] = streakPos[i*6+2] + LEN;
+      if (streakPos[i*6+2] > RANGE) seedStreak(i, false);
+    }
+    streakGeo.attributes.position.needsUpdate = true;
+
+    deckA.offset.x += dt * 0.004;
+    deckB.offset.x += dt * 0.0022;
+  }
+
+  controls.update();
+  hud(performance.now());
+  renderer.render(scene, camera);
+});
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+document.getElementById('boot').classList.add('gone');
+
+// debug hook for scripted screenshots
+window.__setCam = (x, y, z) => { camera.position.set(x, y, z); controls.update(); };
+</script>
+</body>
+</html>
