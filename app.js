@@ -711,12 +711,14 @@ function render(){
   wrap.style.cssText=`width:${canW}px;height:${canH}px;`;
   // only filled slots take part in the entrance stagger — empty positions get
   // index 0 and appear at once, so a loaded plan doesn't crawl in over seconds
-  let fi=0,html='';
+  let fi=0,html='',pilots=[];
   for(let r=0;r<ff.rows;r++){
     for(let hx=0;hx<hxMax;hx++){
       const k=key(r,hx),d=ff.cells[k];
       const cx=hx*hsX+cW/2,cy=r*sY+cH/2;
       const sw=d?cW:EW,sh=d?cH:EH;
+      // 33.5px = icon centre within the 80px slot (svg+gap+name, centred column)
+      if(d)pilots.push({x:cx,y:r*sY+33.5,color:d.color});
       html+=slotHTML(k,d,d?++fi:0,`position:absolute;left:${Math.round(cx-sw/2)}px;top:${Math.round(cy-sh/2)}px;width:${sw}px;height:${sh}px`,!d);
     }
   }
@@ -724,6 +726,9 @@ function render(){
   wireCanvas(wrap);
   attachFreeformSnap(wrap,ff,hsX,sY,cH/2,hxMax);
   fw.appendChild(wrap);
+  // draw all pilots through the shared 3D layer (no-op until ws3d.js loads;
+  // the flat ws() SVG underneath shows through as a fallback)
+  if(window.WS3D)window.WS3D.sync(wrap,pilots,canW,canH);
   fw.classList.toggle('animate',!_suppressAnim);
   _suppressAnim=false;
   renderPoints();
@@ -1371,3 +1376,7 @@ document.querySelectorAll('.overlay').forEach(ov=>{
 });
 
 if(!applyHashIfAny()&&!loadAutosave())render();
+
+// ws3d.js loads as a module (after this script); re-render once it's ready so
+// the 3D pilots paint over the initial formation
+addEventListener('ws3d-ready',()=>render());
