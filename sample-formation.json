@@ -211,8 +211,114 @@
         }
       },
       "bench": []
+    },
+    {
+      "name": "Point 3",
+      "cells": {
+        "5,4": {
+          "name": "Alexandra",
+          "color": "#1d9e75"
+        },
+        "5,6": {
+          "name": "Tobi",
+          "color": "#1d9e75"
+        },
+        "5,8": {
+          "name": "Julia",
+          "color": "#971d9f"
+        },
+        "5,10": {
+          "name": "Stefan G.",
+          "color": "#1d9e75"
+        },
+        "5,2": {
+          "name": "Cristina",
+          "color": "#1d9e75"
+        },
+        "6,2": {
+          "name": "Kuba M.",
+          "color": "#9f1d1d"
+        },
+        "6,4": {
+          "name": "Edd",
+          "color": "#9f1d1d"
+        },
+        "6,6": {
+          "name": "Kuba J.",
+          "color": "#9f1d1d"
+        },
+        "6,8": {
+          "name": "Winiu",
+          "color": "#9f1d1d"
+        },
+        "6,10": {
+          "name": "Walasek",
+          "color": "#9f1d1d"
+        },
+        "6,12": {
+          "name": "Brosig",
+          "color": "#1d9e75"
+        },
+        "6,14": {
+          "name": "Pauline",
+          "color": "#1d9e75"
+        },
+        "5,12": {
+          "name": "Piergiorgio",
+          "color": "#1d9e75"
+        },
+        "5,14": {
+          "name": "Zibi",
+          "color": "#1d9e75"
+        },
+        "4,6": {
+          "name": "Massimo",
+          "color": "#1d9e75"
+        },
+        "4,8": {
+          "name": "Stefan Ka.",
+          "color": "#1d9e75"
+        },
+        "4,10": {
+          "name": "Nemish",
+          "color": "#1d9e75"
+        },
+        "4,12": {
+          "name": "Ritvars",
+          "color": "#1d9e75"
+        },
+        "4,14": {
+          "name": "Serhii",
+          "color": "#1d9e75"
+        },
+        "4,4": {
+          "name": "Sebastian",
+          "color": "#1d9e75"
+        },
+        "4,2": {
+          "name": "Flo",
+          "color": "#1d9e75"
+        },
+        "3,8": {
+          "name": "Andre",
+          "color": "#1d9e75"
+        },
+        "3,10": {
+          "name": "Wiktor",
+          "color": "#1d9e75"
+        },
+        "3,6": {
+          "name": "Tomek N.",
+          "color": "#1d9e75"
+        },
+        "2,8": {
+          "name": "Reto",
+          "color": "#1d9e75"
+        }
+      },
+      "bench": []
     }
   ],
-  "cur": 1,
+  "cur": 0,
   "autofit": false
 }
