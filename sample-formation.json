@@ -8,15 +8,15 @@
           "color": "#9f1d1d"
         },
         "2,4": {
-          "name": "Piotrek W.",
+          "name": "Pauline",
           "color": "#1d9e75"
         },
         "2,6": {
-          "name": "Andre",
+          "name": "Flo",
           "color": "#1d9e75"
         },
         "2,8": {
-          "name": "Flo",
+          "name": "Andre",
           "color": "#1d9e75"
         },
         "2,10": {
@@ -96,11 +96,11 @@
           "color": "#9f1d1d"
         },
         "6,10": {
-          "name": "Roman",
+          "name": "Winiu",
           "color": "#9f1d1d"
         },
         "6,12": {
-          "name": "Pauline",
+          "name": "Walasek",
           "color": "#9f1d1d"
         }
       },
@@ -118,15 +118,15 @@
           "color": "#1d9e75"
         },
         "1,8": {
-          "name": "Reto",
+          "name": "Pauline",
           "color": "#1d9e75"
         },
         "2,5": {
-          "name": "Andre",
+          "name": "Flo",
           "color": "#1d9e75"
         },
         "2,7": {
-          "name": "Flo",
+          "name": "Andre",
           "color": "#1d9e75"
         },
         "2,9": {
@@ -190,7 +190,7 @@
           "color": "#9f1d1d"
         },
         "6,9": {
-          "name": "Roman",
+          "name": "Winiu",
           "color": "#9f1d1d"
         },
         "7,6": {
@@ -198,7 +198,7 @@
           "color": "#9f1d1d"
         },
         "7,8": {
-          "name": "Pauline",
+          "name": "Walasek",
           "color": "#9f1d1d"
         },
         "8,7": {
@@ -206,13 +206,13 @@
           "color": "#1d9e75"
         },
         "0,7": {
-          "name": "Piotrek W.",
+          "name": "Reto",
           "color": "#1d9e75"
         }
       },
       "bench": []
     }
   ],
-  "cur": 0,
+  "cur": 1,
   "autofit": false
 }
