@@ -104,7 +104,7 @@ function capturePilotRects() {
 // gentle in-out curve, instead of the snappy glide used while editing.
 function animatePointSwitch(prev, slow) {
     if (_reduceMotion.matches) return;
-    const dur = slow ? 2800 : 340;
+    const dur = slow ? PLAY_FLIGHT_MS : 340;
     const ease = slow ? 'cubic-bezier(.45,0,.25,1)' : 'cubic-bezier(.2,.8,.2,1)';
     document.querySelectorAll('#fw .slot.filled, #bench-list .bench-item').forEach((el) => {
         const nm = el.querySelector('.slot-name');
@@ -152,9 +152,10 @@ function switchPoint(i, fromPlay) {
 }
 
 // Dive playback: step through the points from the top in slow motion —
-// PLAY_MS per point, of which the first 2.8s is the flight. Any manual point
-// switch, edit-modal open, or drag stops the run.
+// PLAY_MS per point, of which the first PLAY_FLIGHT_MS is the flight. Any
+// manual point switch, edit-modal open, or drag stops the run.
 const PLAY_MS = 4200;
+const PLAY_FLIGHT_MS = 2800;
 let _playT = null;
 
 function stopPlay() {
@@ -175,8 +176,11 @@ function startPlay() {
         switchPoint(PI + 1, true);
         _playT = setTimeout(step, PLAY_MS);
     };
+    // starting from point 1 skips the rewind flight, so only hold the
+    // formation for the usual pause before stepping instead of a full tick
+    const first = PI === 0 ? PLAY_MS - PLAY_FLIGHT_MS : PLAY_MS;
     if (PI !== 0) switchPoint(0, true);
-    _playT = setTimeout(step, PLAY_MS);
+    _playT = setTimeout(step, first);
     renderPoints();
 }
 
