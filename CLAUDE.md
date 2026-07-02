@@ -37,6 +37,8 @@ There is no manual canvas size. `fitGrid(pt)` (called at the top of every `rende
 
 `rows`/`cols` are runtime-derived and not persisted. There is no shape picker and no readout bar — the half-step grid is the only layout.
 
+On screens narrower than the canvas, `#fw` scrolls horizontally (`overflow:auto`). When the `_centerScroll` flag is set — on page load, point switch/delete, and `fromJSON` — `render()` scrolls the formation's bounding box (or the canvas midpoint when the point is empty) into the center of the view; edit renders leave the user's manual pan alone.
+
 ### Points
 
 The points bar (`#points-bar`, rebuilt by `renderPoints()` inside `render()`) shows one chip per point plus actions for the active one: **+ Point** (`addPoint` — deep-clones the current point via `JSON.parse(JSON.stringify(...))` and inserts it after, so the next point starts as "same crew, same shape, now edit"), rename (`renamePoint`, a `prompt()`), reorder (`movePoint(±1)`, swaps and follows), and delete (`delPoint`, `confirm()`-guarded, disabled when only one point remains). Switching points clears `_selected`.

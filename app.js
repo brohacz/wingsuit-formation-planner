@@ -29,6 +29,10 @@ let ekey = null,
     _suppressAnim = false,
     _drag = null,
     _dragMoved = false;
+// when the canvas overflows #fw (narrow screens), the next render scrolls the
+// formation into view; set on load and whenever the active point changes, but
+// not on edits, so a manual pan isn't fought while editing
+let _centerScroll = true;
 let _selected = new Set();
 function cur() {
     return S;
@@ -147,6 +151,7 @@ function switchPoint(i, fromPlay) {
     S = PTS[i];
     clearSelection();
     _suppressAnim = true;
+    _centerScroll = true;
     render();
     animatePointSwitch(prev, fromPlay);
 }
@@ -201,6 +206,7 @@ function delPoint() {
     S = PTS[PI];
     clearSelection();
     _suppressAnim = true;
+    _centerScroll = true;
     render();
     animatePointSwitch(prev);
 }
@@ -898,6 +904,24 @@ function render() {
     wireCanvas(wrap);
     attachFreeformSnap(wrap, ff, hsX, sY, cH / 2, hxMax);
     fw.appendChild(wrap);
+    if (_centerScroll) {
+        _centerScroll = false;
+        if (fw.scrollWidth > fw.clientWidth) {
+            const ks = Object.keys(ff.cells);
+            let c = canW / 2;
+            if (ks.length) {
+                let lo = Infinity,
+                    hi = -Infinity;
+                for (const k of ks) {
+                    const hx = +k.split(',')[1];
+                    if (hx < lo) lo = hx;
+                    if (hx > hi) hi = hx;
+                }
+                c = ((lo + hi) / 2) * hsX + cW / 2;
+            }
+            fw.scrollLeft = Math.max(0, c - fw.clientWidth / 2);
+        }
+    }
     fw.classList.toggle('animate', !_suppressAnim);
     _suppressAnim = false;
     renderPoints();
@@ -1115,6 +1139,7 @@ function fromJSON(str) {
     PI = pi;
     S = PTS[PI];
     clearSelection();
+    _centerScroll = true;
     render();
 }
 
