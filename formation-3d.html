@@ -56,42 +56,6 @@
   .hud{--ink-strong:#0d1730;--ink-mid:rgba(13,23,48,.72);--ink-faint:rgba(13,23,48,.45)}
   .hud{--panel:rgba(255,255,255,.34);--panel-line:rgba(13,23,48,.18)}
 
-  .masthead{top:42px;left:46px;max-width:52vw;text-shadow:0 1px 10px rgba(255,255,255,.5);color:var(--ink-strong)}
-  .masthead .eyebrow{
-    font-size:11px;letter-spacing:.42em;text-transform:uppercase;color:var(--ink-mid);
-    margin-bottom:14px;
-  }
-  .masthead h1{
-    font-family:var(--display);font-weight:900;line-height:.92;
-    font-size:clamp(30px,4.6vw,64px);letter-spacing:-.01em;text-transform:uppercase;
-  }
-  .masthead h1 span{display:block;font-weight:300;color:var(--ink-mid)}
-  .masthead .sub{margin-top:16px;font-size:12px;color:var(--ink-mid);letter-spacing:.08em}
-
-  .telemetry{
-    bottom:46px;left:46px;font-size:12px;letter-spacing:.06em;color:var(--ink-mid);
-    background:var(--panel);border:1px solid var(--panel-line);
-    border-radius:var(--border-radius-lg,14px);padding:14px 18px;backdrop-filter:blur(6px);
-  }
-  .telemetry .row{display:flex;gap:14px;align-items:baseline;margin-top:7px}
-  .telemetry .k{color:var(--ink-faint);width:6ch}
-  .telemetry .v{color:var(--ink-strong);font-weight:500;min-width:9ch}
-  .telemetry .u{color:var(--ink-mid);font-size:10px}
-  .telemetry .bar{
-    width:148px;height:1px;background:var(--ink-faint);margin-bottom:10px;position:relative;
-  }
-  .telemetry .bar::after{
-    content:"";position:absolute;left:0;top:-1px;height:3px;width:38%;background:var(--ink-strong);
-  }
-
-  .spec{
-    bottom:46px;right:46px;text-align:right;font-size:11px;line-height:1.9;color:var(--ink-mid);letter-spacing:.08em;
-    background:var(--panel);border:1px solid var(--panel-line);
-    border-radius:var(--border-radius-lg,14px);padding:12px 18px;backdrop-filter:blur(6px);
-  }
-  .spec b{color:var(--ink-strong);font-weight:500}
-  .spec .tag{color:var(--ink-strong)}
-
   /* points bar — the only interactive HUD, so it opts back into pointer events */
   .points{
     top:auto;bottom:16px;left:50%;transform:translateX(-50%);
@@ -125,11 +89,8 @@
 
   /* staggered reveal */
   .hud{opacity:0;animation:rise 1.1s cubic-bezier(.2,.7,.2,1) forwards}
-  .masthead{animation-delay:.25s}
-  .telemetry{animation-delay:.5s}
-  .spec{animation-delay:.65s}
-  .points{animation-delay:.8s}
-  .hint{animation-delay:.95s}
+  .points{animation-delay:.35s}
+  .hint{animation-delay:.5s}
   @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
   .points{animation-name:riseCenter}
   .hint{animation-name:fadeCenter}
@@ -141,9 +102,6 @@
     .hud{animation:none;opacity:1}
   }
   @media (max-width:640px){
-    .masthead{top:26px;left:22px;max-width:82vw}
-    .telemetry{left:22px;bottom:120px}
-    .spec{right:22px;bottom:120px;bottom:26px}
     .frame{inset:10px}
     .points{bottom:14px}
   }
@@ -163,25 +121,6 @@
 
 <div class="grain"></div>
 <div class="frame"><i></i><i></i><i></i><i></i></div>
-
-<header class="hud masthead">
-  <div class="eyebrow">Formation Flight · 3D</div>
-  <h1>Wingsuit<span id="m-point">formation</span></h1>
-  <div class="sub" id="m-sub">a vertical stack -- each rank higher and ahead of the one below</div>
-</header>
-
-<div class="hud telemetry">
-  <div class="bar"></div>
-  <div class="row"><span class="k">POINT</span><span class="v" id="t-point">1 / 1</span><span class="u"></span></div>
-  <div class="row"><span class="k">PILOTS</span><span class="v" id="t-crew">0</span><span class="u">IN AIR</span></div>
-  <div class="row"><span class="k">ALT</span><span class="v" id="t-alt">3 950</span><span class="u">M AGL</span></div>
-</div>
-
-<div class="hud spec">
-  <div><span class="tag">&#9650;</span> belly-to-earth <b>flat</b></div>
-  <div>grid <b>half-step freeform</b></div>
-  <div>render <b>three.js</b> &middot; icon <b>extruded SVG</b></div>
-</div>
 
 <nav class="hud points" id="points" aria-label="Formation points"></nav>
 
@@ -444,13 +383,12 @@ function roundRect(ctx, x, y, w, h, r){
 const stage = new THREE.Group();
 scene.add(stage);
 
-let DATA = null, POINTS = [], PI = 0;
+let POINTS = [], PI = 0;
 const pilots = new Map();       // name(lower) -> { group, label, target:{x,y,z}, present, op, by }
 const center = new THREE.Vector3();
 let SHOW_LABELS = false;   // labels off by default; toggled from the points bar
 
 function buildStage(data){
-  DATA = data;
   POINTS = Array.isArray(data.points) && data.points.length
     ? data.points : [{ name: 'Point 1', cells: {} }];
   // open on the same point the 2D app was showing, if it told us
@@ -519,7 +457,6 @@ function applyPoint(idx, snap){
   const pt = POINTS[PI];
   for (const info of pilots.values()) info.present = false;
 
-  let crew = 0;
   for (const k in (pt.cells || {})){
     const d = pt.cells[k];
     const key = (d.name || '').trim().toLowerCase();
@@ -529,7 +466,6 @@ function applyPoint(idx, snap){
     const p = gridPos(r, hx);
     info.target = { x: p.x - center.x, y: p.y - center.y, z: p.z - center.z };
     info.present = true;
-    crew++;
     if (snap){
       info.group.position.set(info.target.x, info.target.y, info.target.z);
       info.by = info.target.y;
@@ -543,7 +479,6 @@ function applyPoint(idx, snap){
       info.op = 0;
     }
   }
-  updateHUD(crew);
   syncPointsBar();
 }
 
@@ -551,18 +486,6 @@ function applyPoint(idx, snap){
 // OUTER group rides at scale 1 when visible and ~0 when hidden.
 const ICON_SCALE_ONE = 1;
 
-/* ---------- HUD ---------- */
-const $point = document.getElementById('t-point');
-const $crew = document.getElementById('t-crew');
-const $mPoint = document.getElementById('m-point');
-const $mSub = document.getElementById('m-sub');
-function updateHUD(crew){
-  const pt = POINTS[PI];
-  $point.textContent = `${PI + 1} / ${POINTS.length}`;
-  $crew.textContent = crew;
-  $mPoint.textContent = pt.name || `point ${PI + 1}`;
-  $mSub.textContent = (DATA?.name) ? DATA.name : 'a vertical stack -- each rank higher and ahead of the one below';
-}
 
 /* ---------- points bar ---------- */
 const $points = document.getElementById('points');
@@ -625,17 +548,6 @@ function stopPlay(){
   playing = false;
   const b = document.getElementById('btn-play');
   if (b){ b.textContent = '▶ Play'; }
-}
-
-/* ---------- telemetry ticker (ambient) ---------- */
-let alt = 3950;
-const $alt = document.getElementById('t-alt');
-let lastHud = 0;
-function ambient(t){
-  if (t - lastHud < 160) return;
-  lastHud = t;
-  alt = alt > 900 ? alt - 0.55 - Math.random() * 0.25 : 3950;
-  $alt.textContent = Math.round(alt).toLocaleString('en').replace(/,/g, ' ');
 }
 
 /* ---------- cloud deck far below ---------- */
@@ -753,7 +665,6 @@ renderer.setAnimationLoop(() => {
   }
 
   controls.update();
-  ambient(performance.now());
   renderer.render(scene, camera);
 });
 
