@@ -49,56 +49,71 @@
 
   .hud{position:fixed;z-index:6;pointer-events:none}
 
-  .masthead{top:42px;left:46px;max-width:52vw}
+  /* Dark HUD text on the light blue sky. Ink tones for every text block; the
+     corner panels are a faint light glass so dark text still reads if the
+     camera orbits a darker patch of sky behind them. A soft white halo keeps
+     the text crisp. */
+  .hud{--ink-strong:#0d1730;--ink-mid:rgba(13,23,48,.72);--ink-faint:rgba(13,23,48,.45)}
+  .hud{--panel:rgba(255,255,255,.34);--panel-line:rgba(13,23,48,.18)}
+
+  .masthead{top:42px;left:46px;max-width:52vw;text-shadow:0 1px 10px rgba(255,255,255,.5);color:var(--ink-strong)}
   .masthead .eyebrow{
-    font-size:11px;letter-spacing:.42em;text-transform:uppercase;color:var(--accent);
+    font-size:11px;letter-spacing:.42em;text-transform:uppercase;color:var(--ink-mid);
     margin-bottom:14px;
   }
   .masthead h1{
     font-family:var(--display);font-weight:900;line-height:.92;
     font-size:clamp(30px,4.6vw,64px);letter-spacing:-.01em;text-transform:uppercase;
   }
-  .masthead h1 span{display:block;font-weight:300;color:var(--dim)}
-  .masthead .sub{margin-top:16px;font-size:12px;color:var(--dim);letter-spacing:.08em}
+  .masthead h1 span{display:block;font-weight:300;color:var(--ink-mid)}
+  .masthead .sub{margin-top:16px;font-size:12px;color:var(--ink-mid);letter-spacing:.08em}
 
-  .telemetry{bottom:46px;left:46px;font-size:12px;letter-spacing:.06em}
+  .telemetry{
+    bottom:46px;left:46px;font-size:12px;letter-spacing:.06em;color:var(--ink-mid);
+    background:var(--panel);border:1px solid var(--panel-line);
+    border-radius:var(--border-radius-lg,14px);padding:14px 18px;backdrop-filter:blur(6px);
+  }
   .telemetry .row{display:flex;gap:14px;align-items:baseline;margin-top:7px}
-  .telemetry .k{color:var(--faint);width:6ch}
-  .telemetry .v{color:var(--paper);font-weight:500;min-width:9ch}
-  .telemetry .u{color:var(--dim);font-size:10px}
+  .telemetry .k{color:var(--ink-faint);width:6ch}
+  .telemetry .v{color:var(--ink-strong);font-weight:500;min-width:9ch}
+  .telemetry .u{color:var(--ink-mid);font-size:10px}
   .telemetry .bar{
-    width:148px;height:1px;background:var(--faint);margin-bottom:10px;position:relative;
+    width:148px;height:1px;background:var(--ink-faint);margin-bottom:10px;position:relative;
   }
   .telemetry .bar::after{
-    content:"";position:absolute;left:0;top:-1px;height:3px;width:38%;background:var(--accent);
+    content:"";position:absolute;left:0;top:-1px;height:3px;width:38%;background:var(--ink-strong);
   }
 
-  .spec{bottom:46px;right:46px;text-align:right;font-size:11px;line-height:1.9;color:var(--dim);letter-spacing:.08em}
-  .spec b{color:var(--paper);font-weight:500}
-  .spec .tag{color:var(--accent)}
+  .spec{
+    bottom:46px;right:46px;text-align:right;font-size:11px;line-height:1.9;color:var(--ink-mid);letter-spacing:.08em;
+    background:var(--panel);border:1px solid var(--panel-line);
+    border-radius:var(--border-radius-lg,14px);padding:12px 18px;backdrop-filter:blur(6px);
+  }
+  .spec b{color:var(--ink-strong);font-weight:500}
+  .spec .tag{color:var(--ink-strong)}
 
   /* points bar — the only interactive HUD, so it opts back into pointer events */
   .points{
     top:auto;bottom:16px;left:50%;transform:translateX(-50%);
     display:flex;gap:8px;align-items:center;pointer-events:auto;
-    background:rgba(7,11,30,.5);border:1px solid var(--faint);
+    background:var(--panel);border:1px solid var(--panel-line);
     border-radius:999px;padding:7px 10px;backdrop-filter:blur(6px);
   }
   .points button{
     font-family:var(--mono);font-size:12px;letter-spacing:.06em;
-    color:var(--dim);background:transparent;border:1px solid transparent;
+    color:var(--ink-mid);background:transparent;border:1px solid transparent;
     border-radius:999px;padding:6px 13px;cursor:pointer;transition:.18s;
     white-space:nowrap;
   }
-  .points button:hover{color:var(--paper);border-color:var(--faint)}
-  .points button.on{color:var(--ink);background:var(--accent);border-color:var(--accent);font-weight:500}
-  .points .play{color:var(--accent);font-weight:500}
-  .points .sep{width:1px;height:18px;background:var(--faint);margin:0 2px}
+  .points button:hover{color:var(--ink-strong);border-color:var(--panel-line)}
+  .points button.on{color:#f4f8ff;background:var(--ink-strong);border-color:var(--ink-strong);font-weight:500}
+  .points .play{color:var(--ink-strong);font-weight:600}
+  .points .sep{width:1px;height:18px;background:var(--panel-line);margin:0 2px}
 
   .hint{
     bottom:64px;left:50%;transform:translateX(-50%);
-    font-size:10px;letter-spacing:.3em;text-transform:uppercase;color:var(--faint);
-    white-space:nowrap;
+    font-size:10px;letter-spacing:.3em;text-transform:uppercase;color:var(--ink-mid);
+    white-space:nowrap;text-shadow:0 1px 10px rgba(255,255,255,.5);
   }
 
   #boot{
@@ -220,7 +235,7 @@ renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0x1b2342, 40, 130);
+scene.fog = new THREE.Fog(0xbdd6f0, 55, 190);   // light blue haze, so ranks fade into the sky
 
 const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.1, 400);
 
@@ -239,10 +254,10 @@ const sky = new THREE.Mesh(
     side: THREE.BackSide,
     depthWrite: false,
     uniforms: {
-      top:     { value: new THREE.Color(0x070b1e) },
-      horizon: { value: new THREE.Color(0xe08a4e) },
-      haze:    { value: new THREE.Color(0x4a4376) },
-      below:   { value: new THREE.Color(0x121a33) },
+      top:     { value: new THREE.Color(0x2f74c8) },   // deep daytime sky-blue overhead
+      horizon: { value: new THREE.Color(0xcfe3f6) },   // pale blue haze at the horizon
+      haze:    { value: new THREE.Color(0x8fb8e6) },
+      below:   { value: new THREE.Color(0xd6e8f8) },    // light blue below the horizon
     },
     vertexShader: `
       varying vec3 vP;
@@ -373,15 +388,15 @@ function makeLabel(text){
   const pad = 8, fs = 34;
   const c = document.createElement('canvas');
   const ctx = c.getContext('2d');
-  ctx.font = `500 ${fs}px 'IBM Plex Mono', monospace`;
+  ctx.font = `700 ${fs}px 'IBM Plex Mono', monospace`;
   const w = Math.ceil(ctx.measureText(text).width) + pad * 2;
   const h = fs + pad * 2;
   c.width = w; c.height = h;
-  ctx.font = `500 ${fs}px 'IBM Plex Mono', monospace`;
+  ctx.font = `700 ${fs}px 'IBM Plex Mono', monospace`;
   ctx.textBaseline = 'middle';
-  ctx.fillStyle = 'rgba(7,11,30,.62)';
+  ctx.fillStyle = 'rgba(255,255,255,.72)';   // light glass plate on the blue sky
   roundRect(ctx, 0, 0, w, h, 10); ctx.fill();
-  ctx.fillStyle = '#e8ecf7';
+  ctx.fillStyle = '#0d1730';                 // black ink name, matching the HUD
   ctx.fillText(text, pad, h / 2 + 1);
   const tex = new THREE.CanvasTexture(c);
   tex.anisotropy = 4;
@@ -413,7 +428,7 @@ scene.add(stage);
 let DATA = null, POINTS = [], PI = 0;
 const pilots = new Map();       // name(lower) -> { group, label, target:{x,y,z}, present, op, by }
 const center = new THREE.Vector3();
-let SHOW_LABELS = true;
+let SHOW_LABELS = false;   // labels off by default; toggled from the points bar
 
 function buildStage(data){
   DATA = data;
@@ -449,9 +464,9 @@ function buildStage(data){
     label.visible = SHOW_LABELS;
     group.add(label);
     // `group` is rotated -90deg about x (PITCH), which maps local (x,y,z) ->
-    // world (x, z, -y). Local (0, 0.9, 0.2) therefore rides ~0.2 above the
-    // pilot and ~0.9 ahead of the head, toward the flight direction (-z).
-    label.position.set(0, 0.9, 0.2);
+    // world (x, z, -y). Local (0, -0.7, -0.4) therefore rides ~0.4 below the
+    // pilot and ~0.7 toward the viewer, so the name sits under the wingsuit.
+    label.position.set(0, -0.7, -0.4);
     stage.add(group);
     pilots.set(key, { group, label, target: null, present: false, op: 0, by: 0 });
     group.scale.setScalar(0.001);              // grows in on first appearance
@@ -557,7 +572,7 @@ function buildPointsBar(){
   const t = document.createElement('button');
   t.textContent = 'Labels';
   t.onclick = () => toggleLabels(t);
-  t.classList.add('on');
+  t.classList.toggle('on', SHOW_LABELS);
   $points.appendChild(t);
   syncPointsBar();
 }
@@ -628,7 +643,7 @@ function cloudDeck(size, y, opacity, repeat){
     new THREE.PlaneGeometry(size, size),
     new THREE.MeshBasicMaterial({
       map: tex, transparent: true, opacity,
-      color: 0xb9c4e6, depthWrite: false,
+      color: 0xeaf3ff, depthWrite: false,   // bright white cloud tops, faint blue
     })
   );
   m.rotation.x = -Math.PI / 2;
@@ -636,8 +651,8 @@ function cloudDeck(size, y, opacity, repeat){
   scene.add(m);
   return tex;
 }
-const deckA = cloudDeck(300, -26, 0.5, 5);
-const deckB = cloudDeck(420, -40, 0.35, 8);
+const deckA = cloudDeck(300, -26, 0.8, 5);
+const deckB = cloudDeck(420, -40, 0.6, 8);
 
 /* ---------- wind streaks ---------- */
 const N = 90, LEN = 1.6, RANGE = 44;
