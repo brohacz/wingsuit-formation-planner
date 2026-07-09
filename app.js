@@ -1561,6 +1561,25 @@ $('btn-share').addEventListener('click', () => {
     }
 });
 
+// The 3D-view button is a real <a target="_blank"> link (see index.html), so
+// the browser's own navigation opens the tab -- never popup-blocked, and works
+// even without JS. We only keep its href in sync with the current plan: the
+// formation is handed over in the URL hash using the same URL-safe base64 as
+// share links (works over file:// too), and formation-3d.html decodes #f= on
+// load. Refresh just before the click/activation so it carries the latest edits.
+(() => {
+    const btn3d = $('btn-3d');
+    if (!btn3d) return;
+    const refresh = () => {
+        btn3d.href = `formation-3d.html#f=${b64encode(toJSON())}`;
+    };
+    btn3d.addEventListener('pointerdown', refresh);
+    btn3d.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') refresh();
+    });
+    refresh(); // seed with the current plan on load
+})();
+
 document.addEventListener('keydown', (e) => {
     if (e.ctrlKey || e.metaKey) {
         const k = e.key.toLowerCase();

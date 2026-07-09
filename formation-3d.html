@@ -202,11 +202,30 @@ const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
    still works. The embedded copy is the fallback, never the primary. */
 const EMBEDDED = {"points":[{"name":"Point 1","cells":{"6,8":{"name":"Kuba J.","color":"#9f1d1d"},"2,4":{"name":"Pauline","color":"#1d9e75"},"2,6":{"name":"Flo","color":"#1d9e75"},"2,8":{"name":"Andre","color":"#1d9e75"},"2,10":{"name":"Wiktor","color":"#1d9e75"},"2,12":{"name":"Reto","color":"#1d9e75"},"3,4":{"name":"Tomek N.","color":"#1d9e75"},"3,6":{"name":"Sebastian","color":"#1d9e75"},"3,8":{"name":"Oleksander","color":"#1d9e75"},"3,10":{"name":"Ritvars","color":"#1d9e75"},"3,12":{"name":"Serhii","color":"#1d9e75"},"4,4":{"name":"Cristina","color":"#1d9e75"},"4,6":{"name":"Massimo","color":"#1d9e75"},"4,8":{"name":"Stefan Ka.","color":"#1d9e75"},"4,10":{"name":"Piergiorgio","color":"#1d9e75"},"4,12":{"name":"Zibi","color":"#1d9e75"},"5,4":{"name":"Alexandra","color":"#1d9e75"},"5,6":{"name":"Tobi","color":"#1d9e75"},"5,8":{"name":"Julia","color":"#971d9f"},"5,10":{"name":"Stefan G.","color":"#1d9e75"},"5,12":{"name":"Michal","color":"#1d9e75"},"6,4":{"name":"Kuba M.","color":"#9f1d1d"},"6,6":{"name":"Edd","color":"#9f1d1d"},"6,10":{"name":"Winiu","color":"#9f1d1d"},"6,12":{"name":"Piotr W.","color":"#9f1d1d"}},"bench":[]},{"name":"Point 2","cells":{"4,3":{"name":"Cristina","color":"#1d9e75"},"1,6":{"name":"Tomek N.","color":"#1d9e75"},"1,8":{"name":"Pauline","color":"#1d9e75"},"2,5":{"name":"Flo","color":"#1d9e75"},"2,7":{"name":"Andre","color":"#1d9e75"},"2,9":{"name":"Wiktor","color":"#1d9e75"},"3,4":{"name":"Sebastian","color":"#1d9e75"},"3,6":{"name":"Oleksander","color":"#1d9e75"},"3,8":{"name":"Ritvars","color":"#1d9e75"},"3,10":{"name":"Serhii","color":"#1d9e75"},"4,5":{"name":"Massimo","color":"#1d9e75"},"4,7":{"name":"Stefan Ka.","color":"#1d9e75"},"4,9":{"name":"Piergiorgio","color":"#1d9e75"},"4,11":{"name":"Zibi","color":"#1d9e75"},"5,4":{"name":"Alexandra","color":"#1d9e75"},"5,6":{"name":"Tobi","color":"#1d9e75"},"5,8":{"name":"Julia","color":"#971d9f"},"5,10":{"name":"Stefan G.","color":"#1d9e75"},"6,5":{"name":"Edd","color":"#9f1d1d"},"6,7":{"name":"Kuba J.","color":"#9f1d1d"},"6,9":{"name":"Winiu","color":"#9f1d1d"},"7,6":{"name":"Kuba M.","color":"#9f1d1d"},"7,8":{"name":"Piotr W.","color":"#9f1d1d"},"8,7":{"name":"Michal","color":"#1d9e75"},"0,7":{"name":"Reto","color":"#1d9e75"}},"bench":[]},{"name":"Point 3","cells":{"5,4":{"name":"Alexandra","color":"#1d9e75"},"5,6":{"name":"Tobi","color":"#1d9e75"},"5,8":{"name":"Julia","color":"#971d9f"},"5,10":{"name":"Stefan G.","color":"#1d9e75"},"5,2":{"name":"Cristina","color":"#1d9e75"},"6,2":{"name":"Kuba M.","color":"#9f1d1d"},"6,4":{"name":"Edd","color":"#9f1d1d"},"6,6":{"name":"Kuba J.","color":"#9f1d1d"},"6,8":{"name":"Winiu","color":"#9f1d1d"},"6,10":{"name":"Piotr W.","color":"#9f1d1d"},"6,12":{"name":"Michal","color":"#1d9e75"},"6,14":{"name":"Pauline","color":"#1d9e75"},"5,12":{"name":"Piergiorgio","color":"#1d9e75"},"5,14":{"name":"Zibi","color":"#1d9e75"},"4,6":{"name":"Massimo","color":"#1d9e75"},"4,8":{"name":"Stefan Ka.","color":"#1d9e75"},"4,10":{"name":"Oleksander","color":"#1d9e75"},"4,12":{"name":"Ritvars","color":"#1d9e75"},"4,14":{"name":"Serhii","color":"#1d9e75"},"4,4":{"name":"Sebastian","color":"#1d9e75"},"4,2":{"name":"Flo","color":"#1d9e75"},"3,8":{"name":"Andre","color":"#1d9e75"},"3,10":{"name":"Wiktor","color":"#1d9e75"},"3,6":{"name":"Tomek N.","color":"#1d9e75"},"2,8":{"name":"Reto","color":"#1d9e75"}},"bench":[]}],"cur":0,"autofit":false};
 
+// URL-safe base64 decode (matches the 2D planner's b64decode / share links),
+// Unicode-safe via TextDecoder.
+function b64decode(s){
+  s = s.replace(/-/g, '+').replace(/_/g, '/');
+  while (s.length % 4) s += '=';
+  const bin = atob(s);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
+
 async function loadFormation(){
+  // 1) a plan handed over from the 2D app (or a share link) via #f=<base64>
+  const m = location.hash.match(/^#f=(.+)$/);
+  if (m){
+    try { return JSON.parse(b64decode(m[1])); }
+    catch (e) { /* malformed hash — fall through to the sample */ }
+  }
+  // 2) the bundled sample when served over http(s)
   try {
     const res = await fetch('sample-formation.json', { cache: 'no-store' });
     if (res.ok) return await res.json();
   } catch (e) { /* file:// or offline — fall through to embedded */ }
+  // 3) the embedded copy, so file:// opens still work
   return EMBEDDED;
 }
 
@@ -434,6 +453,8 @@ function buildStage(data){
   DATA = data;
   POINTS = Array.isArray(data.points) && data.points.length
     ? data.points : [{ name: 'Point 1', cells: {} }];
+  // open on the same point the 2D app was showing, if it told us
+  PI = Math.min(Math.max(0, data.cur | 0), POINTS.length - 1);
 
   // global bounding box across every point so the formation never jumps
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
